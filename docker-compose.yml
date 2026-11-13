@@ -1,0 +1,51 @@
+services:
+  # NOTE: one physical DB per bot/persona. Duplicate this file per persona
+  # with a different DB name + volume, or point DATABASE_URL at an existing
+  # pgvector server.
+  bot:
+    build: .
+    environment:
+      BOT_ID: ${BOT_ID:-my-bot}
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:?set me}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:?set me}
+      DISCORD_CATEGORY_IDS: ${DISCORD_CATEGORY_IDS:?set me}
+      DATABASE_URL: postgres://bot:botpass@db:5432/botdb?sslmode=disable
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?set me}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      BRAVE_API_KEY: ${BRAVE_API_KEY:-}
+      PERSONA_PATH: ${PERSONA_PATH:-}
+      SHELL_ENABLED: "true"
+      SHELL_IMAGE: ${SHELL_IMAGE:-alpine:latest}
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+      - dind
+    volumes:
+      - ./persona:/persona:ro
+
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: bot
+      POSTGRES_PASSWORD: botpass
+      POSTGRES_DB: botdb
+    volumes:
+      - botdb:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  # Disposable shell executor sidecar (network isolated per exec via --network none)
+  dind:
+    image: docker:dind
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    volumes:
+      - dind-certs:/certs/client
+
+volumes:
+  botdb:
+  dind-certs:

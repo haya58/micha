@@ -1,0 +1,88 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bot-secret
+type: Opaque
+stringData:
+  DISCORD_BOT_TOKEN: "replace-me"
+  OPENAI_API_KEY: "replace-me"
+  BRAVE_API_KEY: ""
+  DATABASE_URL: "postgres://bot:botpass@postgres:5432/botdb?sslmode=disable"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bot-config
+data:
+  BOT_ID: "my-bot"
+  BOT_DISPLAY_NAME: "my-bot"
+  DISCORD_GUILD_ID: "replace-me"
+  DISCORD_CATEGORY_IDS: "catid1,catid2"
+  OPENAI_BASE_URL: "https://api.openai.com/v1"
+  OPENAI_MODEL: "gpt-4o-mini"
+  OPENAI_EMBEDDING_MODEL: "text-embedding-3-small"
+  SHELL_ENABLED: "true"
+  SHELL_IMAGE: "alpine:latest"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bot-persona
+data:
+  persona.md: |
+    # Managed persona
+    # Mounted at /persona/persona.md. Set PERSONA_PATH to this file.
+    You are a friendly shared chat bot. Keep replies short and helpful.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dis-llm-bot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dis-llm-bot
+  template:
+    metadata:
+      labels:
+        app: dis-llm-bot
+    spec:
+      containers:
+        - name: bot
+          image: dis-llm-bot:latest
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: bot-config
+            - secretRef:
+                name: bot-secret
+          env:
+            - name: PERSONA_PATH
+              value: /persona/persona.md
+          volumeMounts:
+            - name: persona
+              mountPath: /persona
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+        # DinD sidecar for disposable `docker run --network none` exec.
+        # Bot container talks to it via DOCKER_HOST. Privileged only here.
+        - name: dind
+          image: docker:dind
+          securityContext:
+            privileged: true
+          env:
+            - name: DOCKER_TLS_CERTDIR
+              value: ""
+      volumes:
+        - name: persona
+          configMap:
+            name: bot-persona

@@ -1,7 +1,8 @@
 services:
-  # NOTE: one physical DB per bot/persona. Duplicate this file per persona
-  # with a different DB name + volume, or point DATABASE_URL at an existing
-  # pgvector server.
+  # One postgres SERVER shared by all bots; each bot/persona uses its own
+  # DATABASE (same server, different dbname). Extra DBs are created at init
+  # from EXTRA_DBS. Each bot gets its own bot service (or its own compose
+  # file / k8s Deployment) pointing DATABASE_URL at its own dbname.
   bot:
     build: .
     environment:
@@ -9,7 +10,7 @@ services:
       DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:?set me}
       DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:?set me}
       DISCORD_CATEGORY_IDS: ${DISCORD_CATEGORY_IDS:?set me}
-      DATABASE_URL: postgres://bot:botpass@db:5432/botdb?sslmode=disable
+      DATABASE_URL: postgres://bot:botpass@db:5432/${BOT_DB:-botdb}?sslmode=disable
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       OPENAI_API_KEY: ${OPENAI_API_KEY:?set me}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
@@ -32,10 +33,20 @@ services:
       POSTGRES_USER: bot
       POSTGRES_PASSWORD: botpass
       POSTGRES_DB: botdb
+      EXTRA_DBS: ${EXTRA_DBS:-}
     volumes:
       - botdb:/var/lib/postgresql/data
+      - ./docker/db-init:/docker-entrypoint-initdb.d:ro
     ports:
       - "5432:5432"
+
+  # Second bot example (same postgres server, different database):
+  #   bot-kuro:
+  #     extends: bot
+  #     environment:
+  #       BOT_ID: kuro
+  #       DATABASE_URL: postgres://bot:botpass@db:5432/botdb_kuro?sslmode=disable
+  # ...plus EXTRA_DBS=botdb_kuro on the db service (or CREATE DATABASE manually).
 
   # Disposable shell executor sidecar (network isolated per exec via --network none)
   dind:

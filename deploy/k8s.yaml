@@ -8,6 +8,8 @@ stringData:
   OPENAI_API_KEY: "replace-me"
   BRAVE_API_KEY: ""
   DATABASE_URL: "postgres://bot:botpass@postgres:5432/botdb?sslmode=disable"
+  # Multi-bot: share the same postgres server, use one DATABASE (dbname) per
+  # persona, e.g. .../botdb_shiro for bot-shiro and .../botdb_kuro for bot-kuro.
 ---
 apiVersion: v1
 kind: ConfigMap

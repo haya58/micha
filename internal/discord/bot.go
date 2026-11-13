@@ -40,7 +40,7 @@ func New(cfg *config.Config, st *store.Store, lc *llm.Client, persona string) (*
 	return b, nil
 }
 
-func (b *Bot) Open() error { return b.session.Open() }
+func (b *Bot) Open() error  { return b.session.Open() }
 func (b *Bot) Close() error { return b.session.Close() }
 
 func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {

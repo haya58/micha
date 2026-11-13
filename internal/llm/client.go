@@ -14,11 +14,11 @@ import (
 )
 
 type Client struct {
-	BaseURL   string
-	APIKey    string
-	Model     string
+	BaseURL    string
+	APIKey     string
+	Model      string
 	EmbedModel string
-	HTTP      *http.Client
+	HTTP       *http.Client
 }
 
 func New(baseURL, apiKey, model, embedModel string) *Client {

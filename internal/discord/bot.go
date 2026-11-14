@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -133,9 +134,20 @@ func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	b.handleReply(m, channelID, threadID)
 }
 
+// threadStr renders an optional thread ID for logs.
+func threadStr(threadID *string) string {
+	if threadID == nil || *threadID == "" {
+		return "-"
+	}
+	return *threadID
+}
+
 func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID *string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
+
+	log.Printf("[reply] trigger guild=%s ch=%s thread=%s user=%s msg=%.80q",
+		m.GuildID, channelID, threadStr(threadID), m.Author.Username, m.Content)
 
 	attachmentsJSON, _ := json.Marshal(m.Attachments)
 	stMsg := store.Message{
@@ -143,7 +155,10 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 		UserID: m.Author.ID, Username: m.Author.Username,
 		Content: m.Content, Attachments: string(attachmentsJSON),
 	}
-	msgID, _ := b.store.SaveMessage(ctx, stMsg)
+	msgID, err := b.store.SaveMessage(ctx, stMsg)
+	if err != nil {
+		log.Printf("[reply] SaveMessage failed: %v", err)
+	}
 
 	// Enrich user content with image/link context before LLM call.
 	enriched := b.enrichContent(ctx, m)
@@ -164,23 +179,35 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 
 	reply, toolErr := b.chatWithTools(ctx, msgs, msgID)
 	if toolErr != nil {
+		log.Printf("[reply] chat failed guild=%s ch=%s thread=%s msgID=%d hist=%d mem=%d: %v",
+			m.GuildID, channelID, threadStr(threadID), msgID, len(mctx.History), len(mctx.Memories), toolErr)
 		reply = "ごめん、今うまく考えられなかった。もう一度言ってみて。"
 	}
-	_ = b.sendSplit(m.ChannelID, reply)
+	if err := b.sendSplit(m.ChannelID, reply); err != nil {
+		log.Printf("[reply] send failed ch=%s msgID=%d: %v", m.ChannelID, msgID, err)
+		return
+	}
 
-	_, _ = b.store.SaveMessage(ctx, store.Message{
+	if _, err := b.store.SaveMessage(ctx, store.Message{
 		GuildID: m.GuildID, ChannelID: channelID, ThreadID: threadID,
 		UserID: b.botID, Username: b.cfg.DisplayName, Content: reply,
 		Attachments: "[]",
-	})
+	}); err != nil {
+		log.Printf("[reply] SaveMessage(assistant) failed: %v", err)
+	}
 	// Prototype long-term memory: store notable user messages with embeddings.
 	if summary, imp, ok := memory.ShouldRemember(m.Content); ok {
-		if embs, err := b.llm.Embed(ctx, []string{m.Content}); err == nil && len(embs) > 0 {
+		embs, err := b.llm.Embed(ctx, []string{m.Content})
+		if err != nil {
+			log.Printf("[reply] embed failed (memory skipped): %v", err)
+		} else if len(embs) > 0 {
 			scope := channelID
 			if threadID != nil {
 				scope = *threadID
 			}
-			_ = b.store.SaveMemory(ctx, m.GuildID, scope, "fact", m.Author.Username+": "+summary, embs[0], imp)
+			if err := b.store.SaveMemory(ctx, m.GuildID, scope, "fact", m.Author.Username+": "+summary, embs[0], imp); err != nil {
+				log.Printf("[reply] SaveMemory failed: %v", err)
+			}
 		}
 	}
 }
@@ -191,11 +218,18 @@ func (b *Bot) chatWithTools(ctx context.Context, msgs []llm.ChatMessage, msgID i
 	for step := 0; step < 3; step++ {
 		out, err := b.llm.Chat(ctx, cur, toolDefs)
 		if err != nil {
+			log.Printf("[llm] chat step=%d msgID=%d failed: %v", step, msgID, err)
 			return "", err
 		}
 		if len(out.ToolCalls) == 0 {
+			log.Printf("[llm] chat step=%d msgID=%d done replyLen=%d", step, msgID, len(out.Content))
 			return out.Content, nil
 		}
+		names := make([]string, 0, len(out.ToolCalls))
+		for _, tc := range out.ToolCalls {
+			names = append(names, tc.Function.Name)
+		}
+		log.Printf("[llm] chat step=%d msgID=%d toolCalls=%v", step, msgID, names)
 		cur = append(cur, out)
 		for _, tc := range out.ToolCalls {
 			res := b.runTool(ctx, tc, msgID)
@@ -255,8 +289,27 @@ func (b *Bot) runTool(ctx context.Context, tc llm.ToolCall, msgID int64) string 
 	default:
 		result = "unknown tool: " + tc.Function.Name
 	}
-	_ = b.store.SaveToolRun(ctx, &msgID, tc.Function.Name, tc.Function.Arguments, result, int(time.Since(start).Milliseconds()))
+	if err := b.store.SaveToolRun(ctx, &msgID, tc.Function.Name, tc.Function.Arguments, result, int(time.Since(start).Milliseconds())); err != nil {
+		log.Printf("[tool] SaveToolRun failed: %v", err)
+	}
+	snip := result
+	if len(snip) > 300 {
+		snip = snip[:300] + "..."
+	}
+	log.Printf("[tool] %s msgID=%d latency=%dms err=%v result=%.300q",
+		tc.Function.Name, msgID, int(time.Since(start).Milliseconds()),
+		isToolError(result), snip)
 	return result
+}
+
+// isToolError reports whether a tool result string is one of our error shapes.
+func isToolError(result string) bool {
+	for _, p := range []string{"search error:", "fetch error:", "shell error:", "unknown tool:"} {
+		if strings.HasPrefix(result, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // enrichContent downloads image attachments (for vision notes) and pre-fetches
@@ -269,6 +322,7 @@ func (b *Bot) enrichContent(ctx context.Context, m *discordgo.MessageCreate) str
 			if data, ct, err := downloadBytes(ctx, a.URL); err == nil {
 				content += fmt.Sprintf("\n[attached image %s (%s, %d bytes) — user shared this image; describe/react to it]", a.Filename, ct, len(data))
 			} else {
+				log.Printf("[enrich] image download failed %s: %v", a.URL, err)
 				content += fmt.Sprintf("\n[attached image %s could not be downloaded: %v]", a.Filename, err)
 			}
 		}
@@ -280,6 +334,8 @@ func (b *Bot) enrichContent(ctx context.Context, m *discordgo.MessageCreate) str
 				txt = txt[:3000]
 			}
 			content += "\n\n[linked page content]\n" + txt
+		} else {
+			log.Printf("[enrich] link prefetch failed %s: %v", u, err)
 		}
 	}
 	return content

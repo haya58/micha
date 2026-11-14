@@ -9,7 +9,9 @@ Micha  (ミカ と発音) は Discord コミュニティをより盛り上げる
   - OpenCode Go の API で動作確認済
 - Bot が会話したり、読み取ったりできるカテゴリを制限可能な安全性に配慮した設計
 - Bot へ設定する人格や指示を Markdown 形式で指定可能
-- pgvector で構築したデータベースと連携した高度な長期記憶機能
+- pgvector で構築したデータベースと連携した高度な長期記憶機能（重複排除あり）
+- X(Twitter)リンク内の本文・画像取得
+- 読み取り専用チャンネルの定期巡回と話題反映
 - インタラクション機能
   - Bot からの自発的な発言
   - 絵文字によるランダムなインタラクション
@@ -46,12 +48,12 @@ vim config.toml
 | | `readonly_poll_sec` | 読取専用の取込間隔（秒） | `300` |
 | | `login_notice_channel_id` | ログイン時の通知先。空の場合は対象カテゴリの先頭のチャンネル | 空 |
 | `database` | `url` * | Postgres DBへの接続URL | — |
-| `openai` | `base_url` | OpenAI互換のエンドポイント | `https://api.openai.com/v1` |
-| | `api_key` * | OpenAI の API キー | — |
-| | `model` | チャット応答に利用するモデル | `gpt-4o-mini` |
-| | `embedding_model` | 長期記憶用 embedding モデル | `text-embedding-3-small` |
+| `endpoints.<name>` | `base_url` | 名前付きエンドポイントのURL。用途別に複数定義できる | — |
+| | `api_key` | エンドポイントの API キー | — |
+| | `extra_headers` | 追加HTTPヘッダ（例：`x-opencode-session`） | 空 |
+| `models` | `chat` | 応答用モデル。`"<エンドポイント>/<モデル>"` 形式で指定 | — |
+| | `embedding` | 記憶用モデル。`"<エンドポイント>/<モデル>"` 形式で指定 | — |
 | | `embedding_dim` | 長期記憶用ベクトル次元（通常変更不要。DBと一致させる） | `1536` |
-| | `extra_headers` | OpenAI 純正以外のAPI で利用する、追加HTTPヘッダ（例：`x-opencode-session`） | 空 |
 | `brave` | `api_key` | Web 検索に使用する Brave API のキー。未設定の場合 Web 検索不可 | 空 |
 | `persona` | `path` | Bot の人格を定義するペルソナファイル。未設定の場合、デフォルトのペルソナを使用 | 空 |
 | `random_talk` | `probability` | Bot がチャンネルでランダム発言する確率 | `0.02` |
@@ -71,13 +73,13 @@ vim config.toml
 初期設定を済ませてから実行する
 ```sh
 git clone https://github.com/haya58/micha.git
-cd docker
+cd micha/docker
 docker compose up -d
 docker compose logs -f bot  # "bot started" が出ればOK
 ```
 
 -  `../config.toml` をコンテナにマウントする
-- DBは `pgvector/pgvector:pg16` が自動起動し、マイグレーションはBot起動時に自動適用
+- DBは `pgvector/pgvector:pg16` が自動起動し、マイグレーションはBot起動時に自動適用。DB実体はリポジトリ直下の `botdb/` に保存される
 - シェル実行用にDinD（`dind` サービス）が同梱される
   - Botは `DOCKER_HOST=tcp://dind:2375` で接続する。
 - 同一ホストで複数Botを運用する場合は、ペルソナごとにTOMLファイル（例：`config-kuro.toml`）を用意し、`docker-compose.yml` のマウント先を変えたサービスを追加すること。
@@ -88,7 +90,7 @@ docker compose logs -f bot  # "bot started" が出ればOK
 - 適用する
 
 ```sh
-kubectl apply -k .
+kubectl apply -k .  # リポジトリルートで実行
 ```
 - Bot（ペルソナ）を複数起動する場合、Bot ごとに Secret・Deployment を複製し、`database_url` のdbname のみ変える。
 - `kustomization.yaml` が `k8s/` 内マニフェストと `persona/` 内ペルソナファイルを束ねる。

@@ -6,9 +6,7 @@ services:
   # from EXTRA_DBS. App settings come from ../config.toml (CONFIG_PATH);
   # environment variables are not read by the app.
   bot:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
+    image: ghcr.io/haya58/micha:main
     environment:
       CONFIG_PATH: /config.toml
       # Talk to the dind sidecar over plaintext TCP (TLS disabled there).

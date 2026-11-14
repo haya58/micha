@@ -4,3 +4,6 @@ config.toml
 # Working notes (not shared)
 docs/TODO.md
 docs/Checklist.md
+
+# Local development overrides (not shared)
+docker/docker-compose.override.yml

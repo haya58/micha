@@ -39,6 +39,22 @@ func TestStripHTML(t *testing.T) {
 	}
 }
 
+func TestIsBlockedPage(t *testing.T) {
+	for _, s := range []string{
+		"Vercel Security Checkpoint ...",
+		"Just a moment, please verify",
+		"VERIFY YOU ARE HUMAN",
+		"Access Denied - bot protection",
+	} {
+		if !isBlockedPage(s) {
+			t.Fatalf("should be blocked: %q", s)
+		}
+	}
+	if isBlockedPage("IIJmioの料金プランを紹介します。格安SIMの比較記事です。") {
+		t.Fatal("normal article text must not be blocked")
+	}
+}
+
 func TestBraveQueryEncoding(t *testing.T) {
 	var gotQ, gotCount string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

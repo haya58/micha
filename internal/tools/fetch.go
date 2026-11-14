@@ -27,7 +27,11 @@ func FetchPage(ctx context.Context, rawURL string) (string, error) {
 	if host == "" {
 		return "", fmt.Errorf("invalid url")
 	}
-	ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	// Bound DNS explicitly: the caller's ctx can be minutes long and a
+	// hanging resolver would stall the whole reply (observed in prod logs).
+	dnsCtx, dnsCancel := context.WithTimeout(ctx, 8*time.Second)
+	defer dnsCancel()
+	ips, err := net.DefaultResolver.LookupIPAddr(dnsCtx, host)
 	if err != nil {
 		return "", fmt.Errorf("dns failed: %w", err)
 	}
@@ -36,18 +40,39 @@ func FetchPage(ctx context.Context, rawURL string) (string, error) {
 			return "", fmt.Errorf("private IP blocked: %s", host)
 		}
 	}
-	ctx2, cancel := context.WithTimeout(ctx, 20*time.Second)
+	ctx2, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	req, _ := http.NewRequestWithContext(ctx2, "GET", rawURL, nil)
 	req.Header.Set("User-Agent", "dis-llm-bot/0.1 (+prototype)")
-	resp, err := (&http.Client{Timeout: 25 * time.Second}).Do(req)
+	resp, err := (&http.Client{Timeout: 20 * time.Second}).Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 	text := stripHTML(string(raw))
+	if isBlockedPage(text) {
+		return "", fmt.Errorf("site blocks automated fetching: %s", rawURL)
+	}
 	return fmt.Sprintf("URL: %s\n\n%s", rawURL, textutil.Truncate(text, 12000)), nil
+}
+
+// botBlockMarkers matches bot-protection interstitials (Vercel/Cloudflare
+// checkpoints, captchas) whose extracted text is junk for the LLM.
+func isBlockedPage(text string) bool {
+	lower := strings.ToLower(text)
+	for _, m := range []string{
+		"security checkpoint",
+		"just a moment",
+		"verify you are human",
+		"are you a robot",
+		"access denied",
+	} {
+		if strings.Contains(lower, m) {
+			return true
+		}
+	}
+	return false
 }
 
 func stripHTML(s string) string {

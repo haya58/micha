@@ -257,6 +257,10 @@ func (b *Bot) chatWithTools(ctx context.Context, msgs []llm.ChatMessage, msgID i
 
 func (b *Bot) runTool(ctx context.Context, tc llm.ToolCall, msgID int64) string {
 	start := time.Now()
+	// Cap each tool call so one hanging site/endpoint can't stall the reply.
+	// SaveToolRun below still uses the parent ctx so the record persists.
+	tctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
 	var args map[string]any
 	_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
 	var result string
@@ -267,7 +271,7 @@ func (b *Bot) runTool(ctx context.Context, tc llm.ToolCall, msgID int64) string 
 		if f, ok := args["count"].(float64); ok {
 			n = int(f)
 		}
-		r, err := tools.BraveSearch(ctx, b.cfg.BraveAPIKey, q, n)
+		r, err := tools.BraveSearch(tctx, b.cfg.BraveAPIKey, q, n)
 		if err != nil {
 			result = "search error: " + err.Error()
 		} else {
@@ -275,7 +279,7 @@ func (b *Bot) runTool(ctx context.Context, tc llm.ToolCall, msgID int64) string 
 		}
 	case "fetch_page":
 		u, _ := args["url"].(string)
-		r, err := tools.FetchPage(ctx, u)
+		r, err := tools.FetchPage(tctx, u)
 		if err != nil {
 			result = "fetch error: " + err.Error()
 		} else {
@@ -291,7 +295,7 @@ func (b *Bot) runTool(ctx context.Context, tc llm.ToolCall, msgID int64) string 
 		if f, ok := args["timeout"].(float64); ok && f > 0 {
 			to = int(f)
 		}
-		r, err := tools.ExecShell(ctx, b.cfg.ShellImage, cmdStr, to)
+		r, err := tools.ExecShell(tctx, b.cfg.ShellImage, cmdStr, to)
 		if err != nil {
 			result = "shell error: " + err.Error()
 		} else {
@@ -335,9 +339,13 @@ func (b *Bot) enrichContent(ctx context.Context, m *discordgo.MessageCreate) str
 			}
 		}
 	}
-	// first http URL in content: fetch text eagerly (tool remains for follow-ups)
+	// first http URL in content: fetch text eagerly (tool remains for follow-ups).
+	// Short budget: a hanging prefetch must not stall the first LLM call.
 	if u := firstURL(content); u != "" {
-		if txt, err := tools.FetchPage(ctx, u); err == nil {
+		pctx, pcancel := context.WithTimeout(ctx, 12*time.Second)
+		txt, err := tools.FetchPage(pctx, u)
+		pcancel()
+		if err == nil {
 			content += "\n\n[linked page content]\n" + textutil.Truncate(txt, 3000)
 		} else {
 			log.Printf("[enrich] link prefetch failed %s: %v", u, err)

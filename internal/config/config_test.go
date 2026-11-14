@@ -106,3 +106,26 @@ func TestRespondAllOn(t *testing.T) {
 		t.Fatal("RESPOND_ALL=true should enable mention-free mode")
 	}
 }
+
+func TestStatusDelayDefault(t *testing.T) {
+	setRequired(t)
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if c.StatusDelaySec != 4 {
+		t.Fatalf("STATUS_DELAY_SEC default should be 4, got %d", c.StatusDelaySec)
+	}
+}
+
+func TestStatusDelayOverride(t *testing.T) {
+	setRequired(t)
+	t.Setenv("STATUS_DELAY_SEC", "10")
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if c.StatusDelaySec != 10 {
+		t.Fatalf("got %d", c.StatusDelaySec)
+	}
+}

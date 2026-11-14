@@ -2,6 +2,7 @@ package discord
 
 import (
 	"testing"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 
@@ -65,6 +66,23 @@ func TestNilStatusNoop(t *testing.T) {
 	var st *Status
 	st.Update("a", "b") // must not panic
 	st.Done()           // must not panic
+}
+
+func TestDelayedStatusStaysSilentWhenFast(t *testing.T) {
+	// time.Hour delay with nil session: Done before fire must never post
+	// and must not panic or leak the timer.
+	st := postStatusDelayed(nil, "ch", time.Hour, "考え中……", "...")
+	st.Update("Web検索中……", "q")
+	if st.title != "Web検索中……" || st.desc != "q" {
+		t.Fatalf("pending text not refreshed: %+v", st)
+	}
+	if st.posted {
+		t.Fatal("must not post before delay")
+	}
+	st.Done()
+	if st.posted {
+		t.Fatal("Done before delay must not post")
+	}
 }
 
 func TestStripSelfPrefix(t *testing.T) {

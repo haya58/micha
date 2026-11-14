@@ -29,6 +29,8 @@ data:
   SHELL_IMAGE: "alpine:latest"
   # Mention-free mode: respond to every message in allowed channels.
   RESPOND_ALL: "false"
+  # Seconds before the "working..." embed appears. Fast replies stay silent.
+  STATUS_DELAY_SEC: "4"
 ---
 apiVersion: v1
 kind: ConfigMap

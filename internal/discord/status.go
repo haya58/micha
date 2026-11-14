@@ -3,6 +3,7 @@ package discord
 import (
 	"encoding/json"
 	"sync"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 
@@ -13,6 +14,9 @@ import (
 // operation runs. It can be updated in place as phases change and is
 // deleted when the work finishes.
 //
+// The embed is posted lazily: only if the work is still running when the
+// delay elapses. Fast replies never show a status message at all.
+//
 // All methods are safe on a nil Status (no-op), so callers can ignore
 // post errors (e.g. missing permissions) and keep the same code path.
 type Status struct {
@@ -20,16 +24,34 @@ type Status struct {
 	session   *discordgo.Session
 	channelID string
 	msgID     string
+	title     string
+	desc      string
+	posted    bool
+	dismissed bool
+	timer     *time.Timer
 }
 
-// postStatus publishes the initial working embed. Returns nil when it
-// cannot be posted; callers should proceed without status updates.
-func postStatus(s *discordgo.Session, channelID, title, desc string) *Status {
-	msg, err := s.ChannelMessageSendEmbed(channelID, statusEmbed(title, desc))
-	if err != nil || msg == nil {
-		return nil
+// postStatusDelayed returns a Status that publishes its embed only if the
+// work outlasts delay. Call Done when the work finishes.
+func postStatusDelayed(s *discordgo.Session, channelID string, delay time.Duration, title, desc string) *Status {
+	st := &Status{session: s, channelID: channelID, title: title, desc: desc}
+	st.timer = time.AfterFunc(delay, st.postPending)
+	return st
+}
+
+func (st *Status) postPending() {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if st.posted || st.dismissed {
+		return
 	}
-	return &Status{session: s, channelID: channelID, msgID: msg.ID}
+	msg, err := st.session.ChannelMessageSendEmbed(st.channelID, statusEmbed(st.title, st.desc))
+	if err != nil || msg == nil {
+		st.dismissed = true // give up silently; the reply itself still goes out
+		return
+	}
+	st.msgID = msg.ID
+	st.posted = true
 }
 
 func statusEmbed(title, desc string) *discordgo.MessageEmbed {
@@ -41,22 +63,35 @@ func statusEmbed(title, desc string) *discordgo.MessageEmbed {
 }
 
 // Update replaces the embed text in place. Concurrent calls are serialized.
+// Before the embed is posted, it only refreshes the pending text.
 func (st *Status) Update(title, desc string) {
 	if st == nil {
 		return
 	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
+	st.title, st.desc = title, desc
+	if !st.posted {
+		return
+	}
 	_, _ = st.session.ChannelMessageEditEmbed(st.channelID, st.msgID, statusEmbed(title, desc))
 }
 
-// Done removes the status message. Errors are ignored.
+// Done removes the status message, or cancels it if it was never posted.
+// Errors are ignored.
 func (st *Status) Done() {
 	if st == nil {
 		return
 	}
+	if st.timer != nil {
+		st.timer.Stop()
+	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
+	st.dismissed = true
+	if !st.posted {
+		return
+	}
 	_ = st.session.ChannelMessageDelete(st.channelID, st.msgID)
 }
 

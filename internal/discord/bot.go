@@ -60,8 +60,12 @@ func (b *Bot) announceLogin() {
 	channelID := b.cfg.Discord.LoginNoticeChannelID
 	if channelID == "" {
 		chs, err := b.ActiveChannels()
-		if err != nil || len(chs) == 0 {
-			log.Printf("[ready] no channel available for login notice")
+		if err != nil {
+			log.Printf("[ready] ActiveChannels failed: %v", err)
+			return
+		}
+		if len(chs) == 0 {
+			log.Printf("[ready] no text channel under allowed categories")
 			return
 		}
 		channelID = chs[0].ChannelID

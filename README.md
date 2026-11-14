@@ -46,6 +46,10 @@ kubectl apply -f k8s/
 
 DinDサイドカー（`dind` コンテナ）が使い捨て実行を担い、Botは `DOCKER_HOST=tcp://localhost:2375` で接続する。`/healthz` がliveness/readiness probeに設定済みである。
 
+## 継続的デリバリ
+
+`main` ブランチへのpushで `.github/workflows/docker-publish.yml` がLinux/AMD64イメージをビルドし、`ghcr.io/<owner>/<repo>:latest` と short SHAタグでプッシュする。
+
 ## 参考
 
 - TomoriBot (Bredrumb/TomoriBot) は挙動（tool loop、memory種別、persona運用）のみ参考。コード移植なし。

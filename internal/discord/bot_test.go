@@ -1,6 +1,7 @@
 package discord
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -77,6 +78,36 @@ func TestNilStatusNoop(t *testing.T) {
 	var st *Status
 	st.Update("a", "b") // must not panic
 	st.Done()           // must not panic
+}
+
+func TestReactionAliasesValid(t *testing.T) {
+	if len(reactionEmojis) == 0 {
+		t.Fatal("alias table must not be empty")
+	}
+	for alias, emoji := range reactionEmojis {
+		if alias == "" || strings.Contains(alias, " ") {
+			t.Fatalf("bad alias %q", alias)
+		}
+		if emoji == "" {
+			t.Fatalf("empty emoji for %q", alias)
+		}
+	}
+}
+
+func TestParseReactionChoice(t *testing.T) {
+	cases := map[string]string{
+		"thumbsup":        "thumbsup",
+		"  Heart extra  ": "heart",
+		"NONE":            "",
+		"":                "",
+		"notanalias":      "",
+		"thumbsup, heart": "",
+	}
+	for in, want := range cases {
+		if got := parseReactionChoice(in); got != want {
+			t.Fatalf("parseReactionChoice(%q) = %q, want %q", in, got, want)
+		}
+	}
 }
 
 func TestIsReadOnly(t *testing.T) {

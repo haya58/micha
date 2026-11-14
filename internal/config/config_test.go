@@ -160,6 +160,28 @@ api_key = "key"
 	}
 }
 
+func TestLoadReactionDefaults(t *testing.T) {
+	writeTOML(t, `
+[discord]
+token = "tok"
+guild_id = "guild1"
+category_ids = ["cat1"]
+
+[database]
+url = "postgres://localhost/db"
+
+[openai]
+api_key = "key"
+`)
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if c.Reaction.Probability != 0.15 || c.Reaction.CooldownSec != 600 {
+		t.Fatalf("got %+v", c.Reaction)
+	}
+}
+
 func TestLoadBrokenTOML(t *testing.T) {
 	writeTOML(t, "this is = = broken")
 	if _, err := Load(); err == nil {

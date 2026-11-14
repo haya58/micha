@@ -41,6 +41,10 @@ cooldown_sec = 1800
 history_limit = 20
 top_k = 5
 
+[reaction]
+probability = 0.15
+cooldown_sec = 600
+
 [shell]
 enabled = true
 image = "alpine:latest"

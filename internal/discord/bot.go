@@ -29,6 +29,8 @@ type Bot struct {
 	botID     string
 	botName   string
 	readyOnce sync.Once
+	reactMu   sync.Mutex
+	lastReact map[string]time.Time
 	chNamesMu sync.Mutex
 	chNames   map[string]string
 }
@@ -39,7 +41,7 @@ func New(cfg *config.Config, st *store.Store, lc *llm.Client, persona string) (*
 		return nil, err
 	}
 	s.Identify.Intents = discordgo.IntentsGuilds | discordgo.IntentsGuildMessages | discordgo.IntentMessageContent
-	b := &Bot{cfg: cfg, session: s, store: st, llm: lc, persona: persona, chNames: map[string]string{}}
+	b := &Bot{cfg: cfg, session: s, store: st, llm: lc, persona: persona, chNames: map[string]string{}, lastReact: map[string]time.Time{}}
 	s.AddHandler(b.onMessage)
 	s.AddHandler(b.onReady)
 	return b, nil
@@ -345,6 +347,8 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 		log.Printf("[reply] send failed ch=%s msgID=%d: %v", m.ChannelID, msgID, err)
 		return
 	}
+	// Best-effort reaction to the trigger message; never blocks the reply.
+	go b.maybeReact(m)
 
 	if _, err := b.store.SaveMessage(ctx, store.Message{
 		GuildID: m.GuildID, ChannelID: channelID, ThreadID: threadID,

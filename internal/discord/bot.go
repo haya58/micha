@@ -182,7 +182,7 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 		log.Printf("[reply] attaching %d image(s) as vision input msgID=%d", len(images), msgID)
 	}
 
-	mctx := memory.Build(ctx, b.store, b.llm, m.GuildID, m.Author.ID, channelID, threadID, b.cfg.HistoryLimit, b.cfg.MemoryTopK, m.Content)
+	mctx := memory.Build(ctx, b.store, b.llm, m.GuildID, channelID, threadID, b.cfg.HistoryLimit, b.cfg.MemoryTopK, m.Content)
 
 	system := b.persona + "\n\nServer time: " + time.Now().Format(time.RFC3339) + "\n" + memory.FormatPrompt(mctx)
 	var msgs []llm.ChatMessage
@@ -198,7 +198,6 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 
 	reply, toolErr := b.chatWithTools(ctx, msgs, msgID, st, toolEnv{
 		guildID:   m.GuildID,
-		userID:    m.Author.ID,
 		scopeKey:  scopeOf(channelID, threadID),
 		channelID: m.ChannelID,
 		username:  m.Author.Username,
@@ -236,7 +235,7 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 				scope = *threadID
 			}
 			fact := m.Author.Username + ": " + summary
-			if err := b.store.SaveMemory(ctx, m.GuildID, m.Author.ID, scope, "fact", fact, embs[0], imp); err != nil {
+			if err := b.store.SaveMemory(ctx, m.GuildID, scope, "fact", fact, embs[0], imp); err != nil {
 				log.Printf("[reply] SaveMemory failed: %v", err)
 			} else {
 				b.notifyRemembered(m.ChannelID, m.Author.Username, summary)
@@ -295,7 +294,6 @@ func (b *Bot) stripSelfPrefix(reply string) string {
 // toolEnv carries reply context into tool execution (for remember/save).
 type toolEnv struct {
 	guildID   string
-	userID    string
 	scopeKey  string // channelID or threadID: memory scope
 	channelID string // where to send notices (the thread/channel of the trigger)
 	username  string
@@ -392,13 +390,7 @@ func (b *Bot) runTool(ctx context.Context, tc llm.ToolCall, msgID int64, st *Sta
 			result = r
 		}
 	case "remember":
-		rawFact, _ := args["fact"].(string)
-		if strings.TrimSpace(rawFact) == "" {
-			result = "remember error: empty fact"
-			break
-		}
-		// Prefix with the speaker so retrieved memories stay attributable.
-		fact := env.username + ": " + strings.TrimSpace(rawFact)
+		fact, _ := args["fact"].(string)
 		imp := 2
 		if f, ok := args["importance"].(float64); ok {
 			imp = int(f)
@@ -409,12 +401,16 @@ func (b *Bot) runTool(ctx context.Context, tc llm.ToolCall, msgID int64, st *Sta
 				imp = 5
 			}
 		}
+		if strings.TrimSpace(fact) == "" {
+			result = "remember error: empty fact"
+			break
+		}
 		embs, err := b.llm.Embed(tctx, []string{fact})
 		if err != nil {
 			result = "remember error: " + err.Error()
 		} else if len(embs) == 0 {
 			result = "remember error: no embedding returned"
-		} else if err := b.store.SaveMemory(ctx, env.guildID, env.userID, env.scopeKey, "fact", fact, embs[0], imp); err != nil {
+		} else if err := b.store.SaveMemory(ctx, env.guildID, env.scopeKey, "fact", fact, embs[0], imp); err != nil {
 			result = "remember error: " + err.Error()
 		} else {
 			b.notifyRemembered(env.channelID, env.username, fact)

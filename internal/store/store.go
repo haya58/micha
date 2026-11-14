@@ -114,7 +114,6 @@ func (s *Store) RecentByScope(ctx context.Context, guildID, channelID string, th
 
 type Memory struct {
 	ID         int64
-	UserID     string
 	ScopeKey   string
 	Kind       string
 	Summary    string
@@ -135,24 +134,21 @@ func vecLiteral(v []float32) string {
 }
 
 // SaveMemory stores a long-term memory with embedding.
-// Empty userID stores a general (non-user-specific) memory.
-func (s *Store) SaveMemory(ctx context.Context, guildID, userID, scopeKey, kind, summary string, emb []float32, importance int) error {
+func (s *Store) SaveMemory(ctx context.Context, guildID, scopeKey, kind, summary string, emb []float32, importance int) error {
 	_, err := s.Pool.Exec(ctx, `
-		INSERT INTO memories(guild_id, user_id, scope_key, kind, summary, embedding, importance)
-		VALUES($1,NULLIF($2,''),$3,$4,$5,$6::vector,$7)`,
-		guildID, userID, scopeKey, kind, summary, vecLiteral(emb), importance)
+		INSERT INTO memories(guild_id, scope_key, kind, summary, embedding, importance)
+		VALUES($1,$2,$3,$4,$5::vector,$6)`,
+		guildID, scopeKey, kind, summary, vecLiteral(emb), importance)
 	return err
 }
 
-// SearchMemories returns top-K memories by cosine similarity within the guild,
-// ranking the querying user's own memories first so personal preferences
-// don't leak across users.
-func (s *Store) SearchMemories(ctx context.Context, guildID, userID string, emb []float32, topK int) ([]Memory, error) {
+// SearchMemories returns top-K memories by cosine similarity within the guild.
+func (s *Store) SearchMemories(ctx context.Context, guildID string, emb []float32, topK int) ([]Memory, error) {
 	rows, err := s.Pool.Query(ctx, `
-		SELECT id, COALESCE(user_id,''), scope_key, kind, summary, importance
+		SELECT id, scope_key, kind, summary, importance
 		FROM memories WHERE guild_id=$1 AND embedding IS NOT NULL
-		ORDER BY (user_id IS DISTINCT FROM NULLIF($2,'')), embedding <=> $3::vector LIMIT $4`,
-		guildID, userID, vecLiteral(emb), topK)
+		ORDER BY embedding <=> $2::vector LIMIT $3`,
+		guildID, vecLiteral(emb), topK)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +156,7 @@ func (s *Store) SearchMemories(ctx context.Context, guildID, userID string, emb 
 	var out []Memory
 	for rows.Next() {
 		var m Memory
-		if err := rows.Scan(&m.ID, &m.UserID, &m.ScopeKey, &m.Kind, &m.Summary, &m.Importance); err != nil {
+		if err := rows.Scan(&m.ID, &m.ScopeKey, &m.Kind, &m.Summary, &m.Importance); err != nil {
 			return nil, err
 		}
 		out = append(out, m)

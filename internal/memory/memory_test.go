@@ -27,8 +27,8 @@ func TestShouldRememberLong(t *testing.T) {
 func TestFormatPrompt(t *testing.T) {
 	mc := Context{
 		Memories: []store.Memory{
-			{Kind: "fact", Summary: "haya: likes miso ramen"},
-			{Kind: "preference", Summary: "taro: speaks Japanese"},
+			{Kind: "fact", Summary: "likes miso ramen"},
+			{Kind: "preference", Summary: "speaks Japanese"},
 		},
 	}
 	out := FormatPrompt(mc)
@@ -36,9 +36,6 @@ func TestFormatPrompt(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("FormatPrompt missing %q: %q", want, out)
 		}
-	}
-	if !strings.Contains(out, "only to the user who stated them") {
-		t.Fatalf("FormatPrompt must carry attribution guidance: %q", out)
 	}
 	if out := FormatPrompt(Context{}); out != "" {
 		t.Fatalf("empty memories should yield empty prompt, got %q", out)

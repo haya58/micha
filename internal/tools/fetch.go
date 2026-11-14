@@ -76,35 +76,38 @@ func isBlockedPage(text string) bool {
 }
 
 func stripHTML(s string) string {
-	// crude but dependency-free: drop tags, collapse whitespace
+	// Crude but dependency-free and linear: single pass, lowercase copy made
+	// once. (A previous version re-lowercased the tail on every byte: O(n^2)
+	// and minutes of CPU on large pages.)
+	low := strings.ToLower(s)
 	var b strings.Builder
-	inTag, inScript := false, false
-	lower := strings.ToLower(s)
-	_ = lower
-	for i := 0; i < len(s); i++ {
-		if strings.HasPrefix(strings.ToLower(s[i:]), "<script") {
-			inScript = true
-		}
-		if inScript {
-			if strings.HasPrefix(strings.ToLower(s[i:]), "</script") {
-				inScript = false
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		if strings.HasPrefix(low[i:], "<script") || strings.HasPrefix(low[i:], "<style") {
+			// Skip the whole script/style block.
+			tag := "script"
+			if strings.HasPrefix(low[i:], "<style") {
+				tag = "style"
 			}
+			end := strings.Index(low[i:], "</"+tag)
+			if end < 0 {
+				break
+			}
+			i += end
 			continue
 		}
 		if s[i] == '<' {
-			inTag = true
-			continue
-		}
-		if s[i] == '>' {
-			inTag = false
+			if j := strings.IndexByte(s[i:], '>'); j >= 0 {
+				i += j + 1
+			} else {
+				break
+			}
 			b.WriteByte(' ')
 			continue
 		}
-		if !inTag {
-			b.WriteByte(s[i])
-		}
+		b.WriteByte(s[i])
+		i++
 	}
 	parts := strings.Fields(b.String())
-	out := strings.Join(parts, " ")
-	return textutil.Truncate(out, 15000)
+	return textutil.Truncate(strings.Join(parts, " "), 15000)
 }

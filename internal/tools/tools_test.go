@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestBraveSearchNoKey(t *testing.T) {
@@ -36,6 +37,23 @@ func TestStripHTML(t *testing.T) {
 	}
 	if strings.Contains(out, "evil") {
 		t.Fatalf("script not stripped: %q", out)
+	}
+}
+
+func TestStripHTMLStyleAndSpeed(t *testing.T) {
+	// style blocks must go too, and large pages must finish fast (linear).
+	chunk := "<div><p>text</p><script>var x=1;</script><style>.a{color:red}</style></div>"
+	big := "<html><body>" + strings.Repeat(chunk, 2000) + "</body></html>"
+	start := time.Now()
+	out := stripHTML(big)
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("stripHTML too slow: %v", elapsed)
+	}
+	if strings.Contains(out, "var x") || strings.Contains(out, "color:red") {
+		t.Fatalf("script/style leaked: %.100q", out)
+	}
+	if !strings.Contains(out, "text") {
+		t.Fatalf("text lost: %.100q", out)
 	}
 }
 

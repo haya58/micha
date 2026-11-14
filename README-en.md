@@ -12,25 +12,28 @@ Why Micha ?
 → Inspired by [Micha Jawkân-chan](https://www.symphogear-gx.com/characters/micha.php)
 
 ## Features
-### Chat
-- Chat bot that interacts with users through chat on Discord servers
-- Safety-conscious design that restricts the categories where the bot can talk or read
+Micha can do the following.
+### Chatting with Micha
+- Supports reading uploaded images as well as text chat
+- Channels where the bot can talk or read can be restricted by category
 - Persona and instructions configurable in Markdown format
-### Memory & Research
-- Advanced long-term memory integrated with a pgvector-backed database (with deduplication)
-- Fetching text and images from X (Twitter) links
-- Periodic patrol of read-only channels with topic reflection
-### Models
-- Supports both the genuine OpenAI API and OpenAI-compatible APIs
-  - Verified to work with the OpenCode Go API
-- Multiple API endpoints can be registered
-  - For example, use the OpenCode Go API for text chat while using the genuine OpenAI API only for Embedding
-### Interactions
+- Supports simple shell command execution
+  - Spawns a disposable Docker container per execution
+- Periodically patrols read-only channels and reflects topics
+- Maintains advanced long-term memory integrated with a vectorized DB
+- Supports web search and fetching text and images from X (Twitter) links
+### Interactions with Micha
 - Interaction features
   - Spontaneous messages from the bot
   - Random interactions with emoji
-### Runtime
-- Simple shell command execution in disposable containers
+### OpenAI-compatible API support
+- Verified APIs
+  - Genuine OpenAI API
+  - OpenCode Go API
+- Multiple API endpoints can be registered
+  - For example, use the OpenCode Go API for text chat while using the genuine OpenAI API only for Embedding
+### Container-first design
+- Docker image provided
 - Native support for deployment to Kubernetes
 
 ## Quickstart

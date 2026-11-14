@@ -20,7 +20,7 @@ func toolNames(tools []ToolDef) map[string]bool {
 
 func TestDefaultToolsWithShell(t *testing.T) {
 	names := toolNames(DefaultTools(true))
-	for _, want := range []string{"brave_search", "fetch_page", "exec_shell"} {
+	for _, want := range []string{"brave_search", "fetch_page", "exec_shell", "remember"} {
 		if !names[want] {
 			t.Fatalf("missing tool %q", want)
 		}
@@ -30,11 +30,14 @@ func TestDefaultToolsWithShell(t *testing.T) {
 func TestDefaultToolsWithoutShell(t *testing.T) {
 	tools := DefaultTools(false)
 	names := toolNames(tools)
-	if len(tools) != 2 {
-		t.Fatalf("expected 2 tools, got %d", len(tools))
+	if len(tools) != 3 {
+		t.Fatalf("expected 3 tools, got %d", len(tools))
 	}
 	if names["exec_shell"] {
 		t.Fatal("exec_shell must be absent when shell is disabled")
+	}
+	if !names["remember"] {
+		t.Fatal("remember must always be present")
 	}
 }
 

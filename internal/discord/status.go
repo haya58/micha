@@ -115,6 +115,8 @@ func statusTextForTool(name, argsJSON string) (title, desc string) {
 		return "ページ取得中……", str("url")
 	case "exec_shell":
 		return "コマンド実行中……", str("command")
+	case "remember":
+		return "記憶中……", str("fact")
 	default:
 		return "処理中……", ""
 	}

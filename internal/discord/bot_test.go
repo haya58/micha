@@ -54,6 +54,10 @@ func TestStatusTextForTool(t *testing.T) {
 	if title != "コマンド実行中……" || desc != "ls -la" {
 		t.Fatalf("got %q %q", title, desc)
 	}
+	title, desc = statusTextForTool("remember", `{"fact":"味噌ラーメンが好き"}`)
+	if title != "記憶中……" || desc != "味噌ラーメンが好き" {
+		t.Fatalf("got %q %q", title, desc)
+	}
 	title, _ = statusTextForTool("mystery_tool", `{}`)
 	if title != "処理中……" {
 		t.Fatalf("got %q", title)

@@ -152,6 +152,9 @@ func DefaultTools(shellEnabled bool) []ToolDef {
 		{
 			Type: "function",
 		},
+		{
+			Type: "function",
+		},
 	}
 	tools[0].Function.Name = "brave_search"
 	tools[0].Function.Description = "Search the web with Brave. Use for current events, facts, docs."
@@ -171,6 +174,16 @@ func DefaultTools(shellEnabled bool) []ToolDef {
 			"url": map[string]any{"type": "string"},
 		},
 		"required": []string{"url"},
+	}
+	tools[2].Function.Name = "remember"
+	tools[2].Function.Description = "Save a durable fact about the user or server for later conversations (preferences, personal details, commitments). Call when the user states something worth recalling, even in a short message."
+	tools[2].Function.Parameters = map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"fact":       map[string]any{"type": "string"},
+			"importance": map[string]any{"type": "integer", "minimum": 1, "maximum": 5},
+		},
+		"required": []string{"fact"},
 	}
 	if shellEnabled {
 		t := ToolDef{Type: "function"}

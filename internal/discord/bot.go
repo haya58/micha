@@ -137,12 +137,20 @@ func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	b.handleReply(m, channelID, threadID)
 }
 
+// scopeOf returns the memory scope: the thread when in one, else the channel.
 // threadStr renders an optional thread ID for logs.
 func threadStr(threadID *string) string {
 	if threadID == nil || *threadID == "" {
 		return "-"
 	}
 	return *threadID
+}
+
+func scopeOf(channelID string, threadID *string) string {
+	if threadID != nil && *threadID != "" {
+		return *threadID
+	}
+	return channelID
 }
 
 func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID *string) {
@@ -188,7 +196,12 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 	}
 	msgs = append(msgs, llm.ChatMessage{Role: "user", Content: m.Author.Username + ": " + enriched, Images: images})
 
-	reply, toolErr := b.chatWithTools(ctx, msgs, msgID, st)
+	reply, toolErr := b.chatWithTools(ctx, msgs, msgID, st, toolEnv{
+		guildID:   m.GuildID,
+		scopeKey:  scopeOf(channelID, threadID),
+		channelID: m.ChannelID,
+		username:  m.Author.Username,
+	})
 	st.Done()
 	if toolErr != nil {
 		log.Printf("[reply] chat failed guild=%s ch=%s thread=%s msgID=%d hist=%d mem=%d: %v",
@@ -278,7 +291,15 @@ func (b *Bot) stripSelfPrefix(reply string) string {
 	return t
 }
 
-func (b *Bot) chatWithTools(ctx context.Context, msgs []llm.ChatMessage, msgID int64, st *Status) (string, error) {
+// toolEnv carries reply context into tool execution (for remember/save).
+type toolEnv struct {
+	guildID   string
+	scopeKey  string // channelID or threadID: memory scope
+	channelID string // where to send notices (the thread/channel of the trigger)
+	username  string
+}
+
+func (b *Bot) chatWithTools(ctx context.Context, msgs []llm.ChatMessage, msgID int64, st *Status, env toolEnv) (string, error) {
 	toolDefs := llm.DefaultTools(b.cfg.ShellEnabled)
 	cur := append([]llm.ChatMessage{}, msgs...)
 	for step := 0; step < 3; step++ {
@@ -304,7 +325,7 @@ func (b *Bot) chatWithTools(ctx context.Context, msgs []llm.ChatMessage, msgID i
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				res := b.runTool(ctx, tc, msgID, st)
+				res := b.runTool(ctx, tc, msgID, st, env)
 				toolMsgs[i] = llm.ChatMessage{Role: "tool", ToolCallID: tc.ID, Content: res}
 			}()
 		}
@@ -319,7 +340,7 @@ func (b *Bot) chatWithTools(ctx context.Context, msgs []llm.ChatMessage, msgID i
 	return out.Content, nil
 }
 
-func (b *Bot) runTool(ctx context.Context, tc llm.ToolCall, msgID int64, st *Status) string {
+func (b *Bot) runTool(ctx context.Context, tc llm.ToolCall, msgID int64, st *Status, env toolEnv) string {
 	start := time.Now()
 	// Cap each tool call so one hanging site/endpoint can't stall the reply.
 	// SaveToolRun below still uses the parent ctx so the record persists.
@@ -368,6 +389,33 @@ func (b *Bot) runTool(ctx context.Context, tc llm.ToolCall, msgID int64, st *Sta
 		} else {
 			result = r
 		}
+	case "remember":
+		fact, _ := args["fact"].(string)
+		imp := 2
+		if f, ok := args["importance"].(float64); ok {
+			imp = int(f)
+			if imp < 1 {
+				imp = 1
+			}
+			if imp > 5 {
+				imp = 5
+			}
+		}
+		if strings.TrimSpace(fact) == "" {
+			result = "remember error: empty fact"
+			break
+		}
+		embs, err := b.llm.Embed(tctx, []string{fact})
+		if err != nil {
+			result = "remember error: " + err.Error()
+		} else if len(embs) == 0 {
+			result = "remember error: no embedding returned"
+		} else if err := b.store.SaveMemory(ctx, env.guildID, env.scopeKey, "fact", fact, embs[0], imp); err != nil {
+			result = "remember error: " + err.Error()
+		} else {
+			b.notifyRemembered(env.channelID, env.username, fact)
+			result = "remembered"
+		}
 	default:
 		result = "unknown tool: " + tc.Function.Name
 	}
@@ -383,7 +431,7 @@ func (b *Bot) runTool(ctx context.Context, tc llm.ToolCall, msgID int64, st *Sta
 
 // isToolError reports whether a tool result string is one of our error shapes.
 func isToolError(result string) bool {
-	for _, p := range []string{"search error:", "fetch error:", "shell error:", "unknown tool:"} {
+	for _, p := range []string{"search error:", "fetch error:", "shell error:", "remember error:", "unknown tool:"} {
 		if strings.HasPrefix(result, p) {
 			return true
 		}

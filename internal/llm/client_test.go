@@ -139,6 +139,36 @@ func TestChatFallsBackToCompletionTokens(t *testing.T) {
 	}
 }
 
+func TestChatReasoningEffortFallback(t *testing.T) {
+	var bodies []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		bodies = append(bodies, string(raw))
+		if !strings.Contains(string(raw), `"reasoning_effort":"none"`) {
+			w.WriteHeader(400)
+			_, _ = w.Write([]byte(`{"error":{"message":"Function tools with reasoning_effort are not supported. Use /v1/responses or set reasoning_effort to 'none'.","type":"invalid_request_error","param":"reasoning_effort"}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`))
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "key", "model", "embed", nil)
+	msg, err := c.Chat(context.Background(), []ChatMessage{{Role: "user", Content: "hi"}}, DefaultTools(true))
+	if err != nil {
+		t.Fatalf("Chat: %v", err)
+	}
+	if msg.Content != "ok" {
+		t.Fatalf("got %q", msg.Content)
+	}
+	if len(bodies) != 2 {
+		t.Fatalf("expected 1 retry, got %d requests", len(bodies))
+	}
+	if strings.Contains(bodies[0], "reasoning_effort") {
+		t.Fatalf("first request must not set reasoning_effort: %s", bodies[0])
+	}
+}
+
 func TestChatUnrelated400DoesNotRetry(t *testing.T) {
 	calls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

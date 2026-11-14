@@ -199,13 +199,15 @@ type chatResp struct {
 }
 
 func (c *Client) Chat(ctx context.Context, msgs []ChatMessage, tools []ToolDef) (ChatMessage, error) {
-	// Newer models reject max_tokens and/or non-default temperature.
-	// Adjust step by step from the error text, up to 3 attempts.
+	// Newer models/endpoints reject max_tokens, non-default temperature,
+	// or default reasoning effort combined with function tools.
+	// Adjust step by step from the error text, up to 4 attempts.
 	key, withTemp := "max_tokens", true
+	var reasoningEffort *string
 	var err error
 	var msg ChatMessage
-	for attempt := 0; attempt < 3; attempt++ {
-		msg, err = c.postChat(ctx, msgs, tools, key, withTemp)
+	for attempt := 0; attempt < 4; attempt++ {
+		msg, err = c.postChat(ctx, msgs, tools, key, withTemp, reasoningEffort)
 		if err == nil {
 			return msg, nil
 		}
@@ -220,6 +222,11 @@ func (c *Client) Chat(ctx context.Context, msgs []ChatMessage, tools []ToolDef) 
 			withTemp = false
 			changed = true
 		}
+		if reasoningEffort == nil && strings.Contains(lower, "reasoning_effort") {
+			none := "none"
+			reasoningEffort = &none
+			changed = true
+		}
 		if !changed {
 			return ChatMessage{}, err // unrelated error; no retry
 		}
@@ -227,12 +234,15 @@ func (c *Client) Chat(ctx context.Context, msgs []ChatMessage, tools []ToolDef) 
 	return ChatMessage{}, err
 }
 
-func (c *Client) postChat(ctx context.Context, msgs []ChatMessage, tools []ToolDef, maxTokensKey string, withTemp bool) (ChatMessage, error) {
+func (c *Client) postChat(ctx context.Context, msgs []ChatMessage, tools []ToolDef, maxTokensKey string, withTemp bool, reasoningEffort *string) (ChatMessage, error) {
 	payload := map[string]any{
 		"model": c.Model, "messages": msgs, maxTokensKey: 1500,
 	}
 	if withTemp {
 		payload["temperature"] = 0.8
+	}
+	if reasoningEffort != nil {
+		payload["reasoning_effort"] = *reasoningEffort
 	}
 	if len(tools) > 0 {
 		payload["tools"] = tools

@@ -14,6 +14,15 @@ go run ./cmd/bot
 
 ヘルス確認：`curl localhost:8080/healthz` が `ok` を返せばDB接続も正常である。
 
+## 設定
+
+```sh
+cp config.example.toml config.toml
+# config.toml を編集
+```
+
+設定の優先度は「ビルトイン既定値 ＜ TOMLファイル（`CONFIG_PATH`、既定 `./config.toml`） ＜ 環境変数」である。Docker Compose・k8sでは従来通り環境変数でも上書き可能であり、ファイルが存在しない場合は環境変数のみで動作する。
+
 ## Docker Composeでの起動
 
 ```sh

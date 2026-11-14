@@ -574,15 +574,23 @@ func (b *Bot) enrichContent(ctx context.Context, m *discordgo.MessageCreate) (st
 	}
 	// first http URL in content: fetch text eagerly (tool remains for follow-ups).
 	// Short budget: a hanging prefetch must not stall the first LLM call.
+	// Tweet links go through the fxtwitter API so attached images are visible.
 	if u := firstURL(content); u != "" {
 		pctx, pcancel := context.WithTimeout(ctx, 12*time.Second)
-		txt, err := tools.FetchPage(pctx, u)
-		pcancel()
-		if err == nil {
+		if tools.TweetStatusID(u) != "" {
+			txt, imgs, err := tools.FetchTweet(pctx, u)
+			if err == nil {
+				content += "\n\n[linked tweet]\n" + textutil.Truncate(txt, 3000)
+				images = append(images, imgs...)
+			} else {
+				log.Printf("[enrich] tweet prefetch failed %s: %v", u, err)
+			}
+		} else if txt, err := tools.FetchPage(pctx, u); err == nil {
 			content += "\n\n[linked page content]\n" + textutil.Truncate(txt, 3000)
 		} else {
 			log.Printf("[enrich] link prefetch failed %s: %v", u, err)
 		}
+		pcancel()
 	}
 	return content, images
 }

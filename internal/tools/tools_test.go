@@ -57,6 +57,76 @@ func TestStripHTMLStyleAndSpeed(t *testing.T) {
 	}
 }
 
+func TestTweetStatusID(t *testing.T) {
+	cases := map[string]string{
+		"https://x.com/user/status/123456":         "123456",
+		"https://twitter.com/user/status/123456":   "123456",
+		"http://www.x.com/u/status/987":            "987",
+		"https://x.com/user/status/123456/photo/1": "123456",
+		"https://x.com/user/statuses":              "",
+		"https://example.com/a/status/123":         "",
+		"https://x.com/i/status/123":               "123",
+		"not a url":                                "",
+	}
+	for in, want := range cases {
+		if got := TweetStatusID(in); got != want {
+			t.Fatalf("TweetStatusID(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestFetchTweet(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/i/status/123" {
+			w.WriteHeader(404)
+			return
+		}
+		_, _ = w.Write([]byte(`{"code":200,"tweet":{"text":"hello pic","author":{"name":"Taro","screen_name":"taro"},"media":{"photos":[{"url":"https://pbs.example/a.jpg"},{"url":"https://pbs.example/b.jpg"}]}}}`))
+	}))
+	defer srv.Close()
+
+	old := fxtwitterBaseURL
+	fxtwitterBaseURL = srv.URL
+	defer func() { fxtwitterBaseURL = old }()
+
+	text, imgs, err := FetchTweet(context.Background(), "https://x.com/taro/status/123")
+	if err != nil {
+		t.Fatalf("FetchTweet: %v", err)
+	}
+	if !strings.Contains(text, "hello pic") || !strings.Contains(text, "@taro") {
+		t.Fatalf("unexpected text: %q", text)
+	}
+	if len(imgs) != 2 || imgs[0] != "https://pbs.example/a.jpg" {
+		t.Fatalf("unexpected images: %v", imgs)
+	}
+
+	if _, _, err := FetchTweet(context.Background(), "https://x.com/taro/status/999"); err == nil {
+		t.Fatal("expected error for missing tweet")
+	}
+	if _, _, err := FetchTweet(context.Background(), "https://example.com/"); err == nil {
+		t.Fatal("expected error for non-tweet URL")
+	}
+}
+
+func TestFetchPageRoutesTweets(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"code":200,"tweet":{"text":"via tool","media":{"photos":[{"url":"https://pbs.example/c.jpg"}]}}}`))
+	}))
+	defer srv.Close()
+
+	old := fxtwitterBaseURL
+	fxtwitterBaseURL = srv.URL
+	defer func() { fxtwitterBaseURL = old }()
+
+	out, err := FetchPage(context.Background(), "https://twitter.com/u/status/42")
+	if err != nil {
+		t.Fatalf("FetchPage tweet: %v", err)
+	}
+	if !strings.Contains(out, "via tool") || !strings.Contains(out, "https://pbs.example/c.jpg") {
+		t.Fatalf("unexpected output: %q", out)
+	}
+}
+
 func TestIsBlockedPage(t *testing.T) {
 	for _, s := range []string{
 		"Vercel Security Checkpoint ...",

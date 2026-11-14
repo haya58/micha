@@ -1,16 +1,75 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
 
 func setRequired(t *testing.T) {
 	t.Helper()
+	t.Setenv("CONFIG_PATH", "/nonexistent-config.toml")
 	t.Setenv("DISCORD_BOT_TOKEN", "tok")
 	t.Setenv("DISCORD_GUILD_ID", "guild1")
 	t.Setenv("DISCORD_CATEGORY_IDS", "cat1, cat2")
 	t.Setenv("DATABASE_URL", "postgres://localhost/db")
 	t.Setenv("OPENAI_API_KEY", "key")
+}
+
+func writeTOML(t *testing.T, body string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestLoadFromTOML(t *testing.T) {
+	setRequired(t)
+	// Empty env defers to TOML (env wins only when non-empty).
+	t.Setenv("DISCORD_CATEGORY_IDS", "")
+	t.Setenv("CONFIG_PATH", writeTOML(t, `
+bot_id = "file-bot"
+display_name = "file-name"
+openai_model = "file-model"
+shell_enabled = false
+discord_category_ids = ["a", "b", "c"]
+`))
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if c.BotID != "file-bot" || c.DisplayName != "file-name" {
+		t.Fatalf("got %+v", c)
+	}
+	if c.OpenAIModel != "file-model" || c.ShellEnabled {
+		t.Fatalf("got %+v", c)
+	}
+	if len(c.CategoryIDs) != 3 {
+		t.Fatalf("got %v", c.CategoryIDs)
+	}
+}
+
+func TestEnvOverridesTOML(t *testing.T) {
+	setRequired(t)
+	t.Setenv("CONFIG_PATH", writeTOML(t, "openai_model = \"file-model\"\n"))
+	t.Setenv("OPENAI_MODEL", "env-model")
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if c.OpenAIModel != "env-model" {
+		t.Fatalf("got %q", c.OpenAIModel)
+	}
+}
+
+func TestLoadBrokenTOML(t *testing.T) {
+	setRequired(t)
+	t.Setenv("CONFIG_PATH", writeTOML(t, "this is = = broken"))
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error for broken TOML")
+	}
 }
 
 func TestLoadMultipleCategories(t *testing.T) {

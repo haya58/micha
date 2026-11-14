@@ -15,7 +15,18 @@ import (
 
 // FetchPage downloads a URL and extracts rough readable text.
 // SSRF guard: rejects private/loopback/link-local hosts.
+// Tweet links are routed to the fxtwitter API (X pages require login).
 func FetchPage(ctx context.Context, rawURL string) (string, error) {
+	if TweetStatusID(rawURL) != "" {
+		text, imgs, err := FetchTweet(ctx, rawURL)
+		if err != nil {
+			return "", err
+		}
+		for _, u := range imgs {
+			text += "\n[image] " + u
+		}
+		return text, nil
+	}
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return "", err

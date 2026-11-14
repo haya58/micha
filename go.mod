@@ -3,6 +3,7 @@ module dis-llm-bot
 go 1.26.1
 
 require (
+	github.com/BurntSushi/toml v1.6.0
 	github.com/bwmarrin/discordgo v0.29.0
 	github.com/jackc/pgx/v5 v5.13.0
 )

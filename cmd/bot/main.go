@@ -33,7 +33,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("persona: %v", err)
 	}
-	lc := llm.New(cfg.OpenAIBaseURL, cfg.OpenAIAPIKey, cfg.OpenAIModel, cfg.EmbeddingModel)
+	lc := llm.New(cfg.OpenAIBaseURL, cfg.OpenAIAPIKey, cfg.OpenAIModel, cfg.EmbeddingModel, cfg.OpenAIExtraHeaders)
 
 	b, err := dbot.New(cfg, st, lc, personaText)
 	if err != nil {

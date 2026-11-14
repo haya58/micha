@@ -11,27 +11,28 @@ import (
 // One process = one persona = one guild + one logical DB (DATABASE_URL points to
 // a database dedicated to this bot/persona).
 type Config struct {
-	BotID             string
-	DisplayName       string
-	DiscordToken      string
-	GuildID           string
-	CategoryIDs       []string
-	DatabaseURL       string
-	OpenAIBaseURL     string
-	OpenAIAPIKey      string
-	OpenAIModel       string
-	EmbeddingModel    string
-	EmbeddingDim      int
-	BraveAPIKey       string
-	PersonaPath       string
-	RandomProb        float64
-	RandomCooldownSec int
-	HistoryLimit      int
-	MemoryTopK        int
-	ShellEnabled      bool
-	ShellImage        string
-	ShellTimeoutSec   int
-	HealthAddr        string
+	BotID              string
+	DisplayName        string
+	DiscordToken       string
+	GuildID            string
+	CategoryIDs        []string
+	DatabaseURL        string
+	OpenAIBaseURL      string
+	OpenAIAPIKey       string
+	OpenAIModel        string
+	OpenAIExtraHeaders map[string]string
+	EmbeddingModel     string
+	EmbeddingDim       int
+	BraveAPIKey        string
+	PersonaPath        string
+	RandomProb         float64
+	RandomCooldownSec  int
+	HistoryLimit       int
+	MemoryTopK         int
+	ShellEnabled       bool
+	ShellImage         string
+	ShellTimeoutSec    int
+	HealthAddr         string
 }
 
 func getenv(key, def string) string {
@@ -92,6 +93,7 @@ func Load() (*Config, error) {
 			c.ShellTimeoutSec = n
 		}
 	}
+	c.OpenAIExtraHeaders = ParseExtraHeaders(os.Getenv("OPENAI_EXTRA_HEADERS"))
 	if c.DiscordToken == "" {
 		return nil, fmt.Errorf("DISCORD_BOT_TOKEN is required")
 	}
@@ -108,4 +110,24 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("OPENAI_API_KEY is required")
 	}
 	return c, nil
+}
+
+// ParseExtraHeaders parses "Name: value, Name2: value2" into a header map.
+// Used for gateways that need extra headers (e.g. x-opencode-session).
+// Malformed entries are skipped.
+func ParseExtraHeaders(s string) map[string]string {
+	out := map[string]string{}
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		name, value, ok := strings.Cut(part, ":")
+		name, value = strings.TrimSpace(name), strings.TrimSpace(value)
+		if !ok || name == "" || value == "" {
+			continue
+		}
+		out[name] = value
+	}
+	return out
 }

@@ -56,3 +56,30 @@ func TestLoadDefaults(t *testing.T) {
 		t.Fatal("SHELL_ENABLED should default to true")
 	}
 }
+
+func TestParseExtraHeaders(t *testing.T) {
+	got := ParseExtraHeaders("x-opencode-session: ses_123, X-Custom: abc")
+	if got["x-opencode-session"] != "ses_123" || got["X-Custom"] != "abc" {
+		t.Fatalf("got %v", got)
+	}
+	if len(ParseExtraHeaders("")) != 0 {
+		t.Fatal("empty input should yield empty map")
+	}
+	// malformed entries are skipped, valid ones kept
+	got = ParseExtraHeaders("bogus, ok: yes, empty:")
+	if len(got) != 1 || got["ok"] != "yes" {
+		t.Fatalf("got %v", got)
+	}
+}
+
+func TestLoadExtraHeaders(t *testing.T) {
+	setRequired(t)
+	t.Setenv("OPENAI_EXTRA_HEADERS", "x-opencode-session: ses_123")
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if c.OpenAIExtraHeaders["x-opencode-session"] != "ses_123" {
+		t.Fatalf("got %v", c.OpenAIExtraHeaders)
+	}
+}

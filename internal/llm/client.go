@@ -14,18 +14,32 @@ import (
 )
 
 type Client struct {
-	BaseURL    string
-	APIKey     string
-	Model      string
-	EmbedModel string
-	HTTP       *http.Client
+	BaseURL      string
+	APIKey       string
+	Model        string
+	EmbedModel   string
+	ExtraHeaders map[string]string
+	HTTP         *http.Client
 }
 
-func New(baseURL, apiKey, model, embedModel string) *Client {
+func New(baseURL, apiKey, model, embedModel string, extraHeaders map[string]string) *Client {
 	baseURL = strings.TrimRight(baseURL, "/")
 	return &Client{
 		BaseURL: baseURL, APIKey: apiKey, Model: model, EmbedModel: embedModel,
-		HTTP: &http.Client{Timeout: 120 * time.Second},
+		ExtraHeaders: extraHeaders,
+		HTTP:         &http.Client{Timeout: 120 * time.Second},
+	}
+}
+
+// setHeaders applies default auth headers plus endpoint-specific extras
+// (e.g. x-opencode-session required by some OpenAI-compatible gateways).
+func (c *Client) setHeaders(req *http.Request) {
+	req.Header.Set("Content-Type", "application/json")
+	if c.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	}
+	for k, v := range c.ExtraHeaders {
+		req.Header.Set(k, v)
 	}
 }
 
@@ -122,10 +136,7 @@ func (c *Client) Chat(ctx context.Context, msgs []ChatMessage, tools []ToolDef) 
 		Temperature: 0.8, MaxTokens: 1500,
 	})
 	req, _ := http.NewRequestWithContext(ctx, "POST", c.BaseURL+"/chat/completions", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	if c.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.APIKey)
-	}
+	c.setHeaders(req)
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return ChatMessage{}, err
@@ -148,10 +159,7 @@ func (c *Client) Chat(ctx context.Context, msgs []ChatMessage, tools []ToolDef) 
 func (c *Client) Embed(ctx context.Context, texts []string) ([][]float32, error) {
 	body, _ := json.Marshal(map[string]any{"model": c.EmbedModel, "input": texts})
 	req, _ := http.NewRequestWithContext(ctx, "POST", c.BaseURL+"/embeddings", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	if c.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.APIKey)
-	}
+	c.setHeaders(req)
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return nil, err

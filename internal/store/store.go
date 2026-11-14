@@ -178,6 +178,38 @@ func (s *Store) SaveMemory(ctx context.Context, guildID, scopeKey, kind, summary
 	return err
 }
 
+// duplicateDistanceThreshold skips saving a fact whose cosine distance to
+// the nearest existing memory is below this value (near-duplicate).
+// Measured on real data: paraphrases of one fact scored 0.27-0.40,
+// clearly distinct facts scored 0.60+.
+const duplicateDistanceThreshold = 0.45
+
+// MemoryHit is a memory plus its cosine distance to a query embedding.
+type MemoryHit struct {
+	Memory
+	Distance float64
+}
+
+// NearestMemory returns the closest memory to the embedding, or nil.
+func (s *Store) NearestMemory(ctx context.Context, guildID string, emb []float32) (*MemoryHit, error) {
+	var m Memory
+	var dist float64
+	err := s.Pool.QueryRow(ctx, `
+		SELECT id, scope_key, kind, summary, importance, embedding <=> $2::vector
+		FROM memories WHERE guild_id=$1 AND embedding IS NOT NULL
+		ORDER BY embedding <=> $2::vector LIMIT 1`,
+		guildID, vecLiteral(emb)).Scan(&m.ID, &m.ScopeKey, &m.Kind, &m.Summary, &m.Importance, &dist)
+	if err != nil {
+		return nil, nil // no memories yet is not an error for callers
+	}
+	return &MemoryHit{Memory: m, Distance: dist}, nil
+}
+
+// IsDuplicate reports whether the distance indicates a near-duplicate.
+func IsDuplicate(dist float64) bool {
+	return dist < duplicateDistanceThreshold
+}
+
 // SearchMemories returns top-K memories by cosine similarity within the guild.
 func (s *Store) SearchMemories(ctx context.Context, guildID string, emb []float32, topK int) ([]Memory, error) {
 	rows, err := s.Pool.Query(ctx, `

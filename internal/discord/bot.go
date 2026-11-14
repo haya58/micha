@@ -531,6 +531,11 @@ func (b *Bot) runTool(ctx context.Context, tc llm.ToolCall, msgID int64, st *Sta
 			result = "remember error: " + err.Error()
 		} else if len(embs) == 0 {
 			result = "remember error: no embedding returned"
+		} else if near, derr := b.store.NearestMemory(ctx, env.guildID, embs[0]); derr != nil {
+			result = "remember error: " + derr.Error()
+		} else if near != nil && store.IsDuplicate(near.Distance) {
+			log.Printf("[tool] remember skipped as duplicate of #%d (dist=%.3f)", near.ID, near.Distance)
+			result = "already remembered (duplicate skipped, no notification sent)"
 		} else if err := b.store.SaveMemory(ctx, env.guildID, env.scopeKey, "fact", fact, embs[0], imp); err != nil {
 			result = "remember error: " + err.Error()
 		} else {

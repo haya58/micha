@@ -1,7 +1,7 @@
-# dis-llm-bot
-
-共用 Discord チャットボット。1プロセス = 1ペルソナ = 1ギルド = 1データベース。
-外部仕様は `docs/spec-external.md`、内部仕様は `docs/spec-internal.md` を参照する。
+# Micha
+## 概要
+Micha  (ミカ と発音) は Discord コミュニティをより盛り上げるための LLM チャット Bot アプリケーションです。
+シンプルで堅牢ながら、現代の LLM チャット Bot に必要な機能を備えています。
 
 ## 設定
 

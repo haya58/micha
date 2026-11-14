@@ -664,10 +664,33 @@ func (b *Bot) ActiveChannels() ([]ChannelSnapshot, error) {
 func (b *Bot) RandomSay(channelID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	hist, _ := b.store.RecentByScope(ctx, b.cfg.Discord.GuildID, channelID, nil, 8)
+	guildID := b.cfg.Discord.GuildID
+	hist, _ := b.store.RecentByScope(ctx, guildID, channelID, nil, 8)
+	// Use the latest user message as the memory query so related long-term
+	// memories are recalled, like in replies.
+	query := ""
+	for i := len(hist) - 1; i >= 0; i-- {
+		if hist[i].UserID != b.botID && strings.TrimSpace(hist[i].Content) != "" {
+			query = hist[i].Content
+			break
+		}
+	}
+	mctx := memory.Build(ctx, b.store, b.llm, guildID, channelID, nil, 8, 3, query)
+	// Surface read-only channel topics so random talk can pick them up.
+	if ids := b.cfg.Discord.ReadonlyChannelIDs; len(ids) > 0 {
+		if ro, err := b.store.RecentFromChannels(ctx, guildID, ids, 5); err != nil {
+			log.Printf("[random] readonly context failed: %v", err)
+		} else if len(ro) > 0 {
+			mctx.Readonly = ro
+			mctx.ReadonlyNames = map[string]string{}
+			for _, rm := range ro {
+				mctx.ReadonlyNames[rm.ChannelID] = b.channelName(rm.ChannelID)
+			}
+		}
+	}
 	var msgs []llm.ChatMessage
-	msgs = append(msgs, llm.ChatMessage{Role: "system", Content: b.persona + "\nYou may start a light casual conversation. Keep it short. If nothing interesting comes to mind, reply with exactly: SKIP"})
-	for _, h := range hist {
+	msgs = append(msgs, llm.ChatMessage{Role: "system", Content: b.persona + "\nYou may start a light casual conversation. Keep it short. You may pick up topics from other channels or memories shown above. If nothing interesting comes to mind, reply with exactly: SKIP\n" + memory.FormatPrompt(mctx)})
+	for _, h := range mctx.History {
 		role := "user"
 		if h.UserID == b.botID {
 			role = "assistant"

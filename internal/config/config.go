@@ -84,7 +84,7 @@ func defaults() *Config {
 	c.RandomTalk.CooldownSec = 1800
 	c.Memory.HistoryLimit = 30
 	c.Memory.TopK = 8
-	c.Memory.ReadonlyPerChannel = 5
+	c.Memory.ReadonlyPerChannel = 10
 	c.Reaction.Probability = 0.15
 	c.Reaction.CooldownSec = 600
 	c.Discord.ReadonlyPollSec = 300

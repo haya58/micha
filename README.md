@@ -95,7 +95,7 @@ vim config.toml
 | `random_talk` | `cooldown_sec` | Bot がチャンネルでランダム発言する間隔(秒) | `1800` |
 | `memory` | `history_limit` | Bot が参照するチャットの履歴件数 | `30` |
 | `memory` | `top_k` | Bot が想起する記憶の件数 | `8` |
-| `memory` | `readonly_per_channel` | 読取専用チャンネル毎に参照する話題件数 | `5` |
+| `memory` | `readonly_per_channel` | 読取専用チャンネル毎に参照する話題件数 | `10` |
 | `reaction` | `probability` | Bot が絵文字でリアクションする確率 | `0.15` |
 | `reaction` | `cooldown_sec` | Bot が絵文字でリアクションする間隔(秒) | `600` |
 | `shell` | `enabled` | Bot によるシェルコマンド実行可否 | `true` |

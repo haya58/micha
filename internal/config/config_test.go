@@ -129,8 +129,8 @@ func TestLoadDefaults(t *testing.T) {
 	if c.RandomTalk.Probability != 0.02 || c.Memory.TopK != 8 {
 		t.Fatalf("got %+v %+v", c.RandomTalk, c.Memory)
 	}
-	if c.Memory.ReadonlyPerChannel != 5 {
-		t.Fatalf("readonly_per_channel should default to 5, got %d", c.Memory.ReadonlyPerChannel)
+	if c.Memory.ReadonlyPerChannel != 10 {
+		t.Fatalf("readonly_per_channel should default to 10, got %d", c.Memory.ReadonlyPerChannel)
 	}
 }
 

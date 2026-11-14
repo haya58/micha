@@ -1,2 +1,6 @@
 .env
 config.toml
+
+# Working notes (not shared)
+docs/TODO.md
+docs/Checklist.md

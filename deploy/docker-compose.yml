@@ -1,3 +1,5 @@
+name: dis-llm-bot
+
 services:
   # One postgres SERVER shared by all bots; each bot/persona uses its own
   # DATABASE (same server, different dbname). Extra DBs are created at init

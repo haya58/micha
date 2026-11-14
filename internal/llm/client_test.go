@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -96,5 +97,62 @@ func TestPlainStringStillWorks(t *testing.T) {
 	var back ChatMessage
 	if err := json.Unmarshal(raw, &back); err != nil || back.Content != "hello" {
 		t.Fatalf("round trip failed: %+v %v", back, err)
+	}
+}
+
+func TestChatFallsBackToCompletionTokens(t *testing.T) {
+	var bodies []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		bodies = append(bodies, string(raw))
+		if strings.Contains(string(raw), `"max_tokens"`) {
+			w.WriteHeader(400)
+			_, _ = w.Write([]byte(`{"error":{"message":"Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.","type":"invalid_request_error"}}`))
+			return
+		}
+		if strings.Contains(string(raw), `"temperature"`) {
+			w.WriteHeader(400)
+			_, _ = w.Write([]byte(`{"error":{"message":"Unsupported value: 'temperature' does not support 0.8 with this model.","type":"invalid_request_error"}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`))
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "key", "model", "embed", nil)
+	msg, err := c.Chat(context.Background(), []ChatMessage{{Role: "user", Content: "hi"}}, nil)
+	if err != nil {
+		t.Fatalf("Chat: %v", err)
+	}
+	if msg.Content != "ok" {
+		t.Fatalf("got %q", msg.Content)
+	}
+	if len(bodies) != 3 {
+		t.Fatalf("expected 2 retries, got %d requests", len(bodies))
+	}
+	if !strings.Contains(bodies[0], `"max_tokens"`) || !strings.Contains(bodies[0], `"temperature"`) {
+		t.Fatalf("first request should use legacy params: %s", bodies[0])
+	}
+	last := bodies[len(bodies)-1]
+	if !strings.Contains(last, `"max_completion_tokens"`) || strings.Contains(last, `"temperature"`) {
+		t.Fatalf("final retry should swap params: %s", last)
+	}
+}
+
+func TestChatUnrelated400DoesNotRetry(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(400)
+		_, _ = w.Write([]byte(`{"error":{"message":"bad request"}}`))
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "key", "model", "embed", nil)
+	if _, err := c.Chat(context.Background(), []ChatMessage{{Role: "user", Content: "hi"}}, nil); err == nil {
+		t.Fatal("expected error")
+	}
+	if calls != 1 {
+		t.Fatalf("unrelated 400 must not retry, got %d calls", calls)
 	}
 }

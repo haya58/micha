@@ -189,14 +189,6 @@ func DefaultTools(shellEnabled bool) []ToolDef {
 	return tools
 }
 
-type chatReq struct {
-	Model       string        `json:"model"`
-	Messages    []ChatMessage `json:"messages"`
-	Tools       []ToolDef     `json:"tools,omitempty"`
-	Temperature float64       `json:"temperature"`
-	MaxTokens   int           `json:"max_tokens"`
-}
-
 type chatResp struct {
 	Choices []struct {
 		Message ChatMessage `json:"message"`
@@ -207,10 +199,45 @@ type chatResp struct {
 }
 
 func (c *Client) Chat(ctx context.Context, msgs []ChatMessage, tools []ToolDef) (ChatMessage, error) {
-	body, _ := json.Marshal(chatReq{
-		Model: c.Model, Messages: msgs, Tools: tools,
-		Temperature: 0.8, MaxTokens: 1500,
-	})
+	// Newer models reject max_tokens and/or non-default temperature.
+	// Adjust step by step from the error text, up to 3 attempts.
+	key, withTemp := "max_tokens", true
+	var err error
+	var msg ChatMessage
+	for attempt := 0; attempt < 3; attempt++ {
+		msg, err = c.postChat(ctx, msgs, tools, key, withTemp)
+		if err == nil {
+			return msg, nil
+		}
+		lower := strings.ToLower(err.Error())
+		changed := false
+		if key == "max_tokens" && (strings.Contains(lower, "max_completion_tokens") ||
+			(strings.Contains(lower, "max_tokens") && strings.Contains(lower, "unsupported"))) {
+			key = "max_completion_tokens"
+			changed = true
+		}
+		if withTemp && strings.Contains(lower, "temperature") {
+			withTemp = false
+			changed = true
+		}
+		if !changed {
+			return ChatMessage{}, err // unrelated error; no retry
+		}
+	}
+	return ChatMessage{}, err
+}
+
+func (c *Client) postChat(ctx context.Context, msgs []ChatMessage, tools []ToolDef, maxTokensKey string, withTemp bool) (ChatMessage, error) {
+	payload := map[string]any{
+		"model": c.Model, "messages": msgs, maxTokensKey: 1500,
+	}
+	if withTemp {
+		payload["temperature"] = 0.8
+	}
+	if len(tools) > 0 {
+		payload["tools"] = tools
+	}
+	body, _ := json.Marshal(payload)
 	req, _ := http.NewRequestWithContext(ctx, "POST", c.BaseURL+"/chat/completions", bytes.NewReader(body))
 	c.setHeaders(req)
 	resp, err := c.HTTP.Do(req)

@@ -1,0 +1,8 @@
+# Local development override (auto-loaded alongside docker-compose.yml).
+# Builds the image locally instead of pulling from GHCR.
+services:
+  bot:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: dis-llm-bot:local

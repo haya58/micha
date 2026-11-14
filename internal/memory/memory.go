@@ -62,30 +62,3 @@ func FormatPrompt(mc Context) string {
 	}
 	return b.String()
 }
-
-// ShouldRemember is a cheap heuristic for the prototype: remember longer user
-// messages (TomoriBot-style summarization is a future step; here we store raw
-// excerpts with importance 1-2 so recall works without an extra LLM call).
-// URLs are excluded from the length check: sharing a link alone must not
-// trigger memorization (link contents stay available via fetch tools).
-func ShouldRemember(content string) (string, int, bool) {
-	t := strings.TrimSpace(content)
-	if len([]rune(stripURLs(t))) < 40 {
-		return "", 0, false
-	}
-	return textutil.Truncate(t, 500), 1, true
-}
-
-// stripURLs removes http(s) tokens so bare link shares don't count as
-// substantive messages.
-func stripURLs(s string) string {
-	kept := make([]string, 0, 8)
-	for _, f := range strings.Fields(s) {
-		u := strings.Trim(f, "<>.,)\"'")
-		if strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") {
-			continue
-		}
-		kept = append(kept, f)
-	}
-	return strings.Join(kept, " ")
-}

@@ -23,7 +23,7 @@ internal/textutil          UTF-8安全な切詰・無効バイト除去
 2. 受信：ギルド→カテゴリ／スレッド解決→読み取り専用除外→権限確認→応答条件判定。
 3. 応答：履歴（直近20件）＋類似記憶（Top5）＋読み取り専用話題＋ペルソナでプロンプト構築→LLM呼出（tool最大3往復・並列実行）→接頭辞除去→2000字分割送信→確率的リアクション付与。
 4. 工具：`brave_search`（Brave API）・`fetch_page`（SSRF対策・ボット判定排除・DNS8秒上限）・`exec_shell`（docker CLI経由でDinDに使い捨て実行）・`remember`（記憶保存）。
-5. 記憶：全発言を `messages` にupsert保存。40字超（URL除く）または `remember` 呼出で `memories` にembedding付き保存。リンク共有だけでは保存しない。
+5. 記憶：全発言を `messages` にupsert保存。長期記憶は `remember` 呼出（LLM判定）のみで `memories` にembedding付き保存する。リンク共有だけでは保存しない。
 6. 定期：ランダム発言（5分tick・確率・クールダウン）、読み取り専用取得（既定300秒・Discord IDでupsert）。
 
 ## LLMクライアントの適応

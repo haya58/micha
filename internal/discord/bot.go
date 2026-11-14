@@ -360,20 +360,9 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 	}); err != nil {
 		log.Printf("[reply] SaveMessage(assistant) failed: %v", err)
 	}
-	// Prototype long-term memory: store notable user messages with embeddings.
-	if summary, imp, ok := memory.ShouldRemember(m.Content); ok {
-		embs, err := b.llm.Embed(ctx, []string{m.Content})
-		if err != nil {
-			log.Printf("[reply] embed failed (memory skipped; check OPENAI_EMBEDDING_MODEL): %v", err)
-		} else if len(embs) > 0 {
-			fact := m.Author.Username + ": " + summary
-			if err := b.store.SaveMemory(ctx, m.GuildID, scope, "fact", fact, embs[0], imp); err != nil {
-				log.Printf("[reply] SaveMemory failed: %v", err)
-			} else {
-				b.notifyRemembered(m.ChannelID, m.Author.Username, summary)
-			}
-		}
-	}
+	// Long-term memory is stored only via the remember tool (LLM judgment).
+	// No length-based auto-save: every memorized fact is traceable to a
+	// model decision visible in tool_runs.
 }
 
 // notifyRemembered tells the channel that a new fact about the user was

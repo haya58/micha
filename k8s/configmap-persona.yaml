@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bot-persona
+data:
+  persona.md: |
+    # Managed persona
+    # Mounted at /persona/persona.md. Set PERSONA_PATH to this file.
+    You are a friendly shared chat bot. Keep replies short and helpful.

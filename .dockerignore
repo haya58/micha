@@ -6,7 +6,9 @@ config-*.toml
 # Docs and deploy manifests are not needed to build the binary.
 README.md
 persona/
-deploy/
-!deploy/Dockerfile
+docker/
+k8s/
+create-dbs.sh
+!docker/Dockerfile
 # NOTE: internal/persona/default.md must stay included:
 # the final image copies it to /persona/default.md.

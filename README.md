@@ -25,7 +25,7 @@ go run ./cmd/bot
 ## Docker Composeでの起動
 
 ```sh
-cd deploy
+cd docker
 docker compose up --build -d
 docker compose logs -f bot  # "bot started" が出ればDiscord接続成功
 ```
@@ -41,7 +41,7 @@ docker compose logs -f bot  # "bot started" が出ればDiscord接続成功
 3. 適用する：
 
 ```sh
-kubectl apply -f deploy/k8s.yaml
+kubectl apply -f k8s/
 ```
 
 DinDサイドカー（`dind` コンテナ）が使い捨て実行を担い、Botは `DOCKER_HOST=tcp://localhost:2375` で接続する。`/healthz` がliveness/readiness probeに設定済みである。

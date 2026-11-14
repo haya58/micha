@@ -2,6 +2,8 @@ package tools
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -37,9 +39,33 @@ func TestStripHTML(t *testing.T) {
 	}
 }
 
-func TestURLQueryEscapes(t *testing.T) {
-	if got := urlQuery("a b&c"); got != "a%20b%26c" {
-		t.Fatalf("got %q", got)
+func TestBraveQueryEncoding(t *testing.T) {
+	var gotQ, gotCount string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQ, gotCount = r.URL.Query().Get("q"), r.URL.Query().Get("count")
+		if r.Header.Get("X-Subscription-Token") != "testkey" {
+			t.Error("missing subscription token header")
+		}
+		_, _ = w.Write([]byte(`{"web":{"results":[{"title":"IIJ","url":"https://example.com","description":"desc"}]}}`))
+	}))
+	defer srv.Close()
+
+	old := braveSearchBaseURL
+	braveSearchBaseURL = srv.URL
+	defer func() { braveSearchBaseURL = old }()
+
+	out, err := BraveSearch(context.Background(), "testkey", "インターネットイニシアティブ 企業", 3)
+	if err != nil {
+		t.Fatalf("BraveSearch: %v", err)
+	}
+	if gotQ != "インターネットイニシアティブ 企業" {
+		t.Fatalf("query not round-tripped, got %q", gotQ)
+	}
+	if gotCount != "3" {
+		t.Fatalf("count not sent, got %q", gotCount)
+	}
+	if !strings.Contains(out, "IIJ") || !strings.Contains(out, "https://example.com") {
+		t.Fatalf("unexpected output: %q", out)
 	}
 }
 

@@ -143,6 +143,9 @@ func (c *Client) Chat(ctx context.Context, msgs []ChatMessage, tools []ToolDef) 
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if resp.StatusCode >= 300 {
+		return ChatMessage{}, fmt.Errorf("chat status %d: %.300s", resp.StatusCode, raw)
+	}
 	var out chatResp
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return ChatMessage{}, fmt.Errorf("chat decode: %v body=%.300s", err, raw)
@@ -166,6 +169,9 @@ func (c *Client) Embed(ctx context.Context, texts []string) ([][]float32, error)
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("embed status %d: %.300s (endpoint may not offer /embeddings)", resp.StatusCode, raw)
+	}
 	var out struct {
 		Data []struct {
 			Embedding []float32 `json:"embedding"`

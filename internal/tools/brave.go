@@ -6,8 +6,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 )
+
+// braveSearchBaseURL is a var so tests can point it at a local server.
+var braveSearchBaseURL = "https://api.search.brave.com/res/v1/web/search"
 
 // BraveSearch calls Brave Web Search API. Requires BRAVE_API_KEY.
 func BraveSearch(ctx context.Context, apiKey, query string, count int) (string, error) {
@@ -17,8 +21,14 @@ func BraveSearch(ctx context.Context, apiKey, query string, count int) (string, 
 	if count <= 0 || count > 10 {
 		count = 5
 	}
-	req, _ := http.NewRequestWithContext(ctx, "GET",
-		fmt.Sprintf("https://api.search.brave.com/res/v1/web/search?q=%s&count=%d&text_decorations=false", urlQuery(query), count), nil)
+	params := url.Values{}
+	params.Set("q", query)
+	params.Set("count", fmt.Sprintf("%d", count))
+	params.Set("text_decorations", "false")
+	req, err := http.NewRequestWithContext(ctx, "GET", braveSearchBaseURL+"?"+params.Encode(), nil)
+	if err != nil {
+		return "", err
+	}
 	req.Header.Set("X-Subscription-Token", apiKey)
 	req.Header.Set("Accept", "application/json")
 	httpc := &http.Client{Timeout: 20 * time.Second}
@@ -58,22 +68,6 @@ func BraveSearch(ctx context.Context, apiKey, query string, count int) (string, 
 		out = out[:4000]
 	}
 	return out, nil
-}
-
-func urlQuery(s string) string {
-	// minimal escaping without net/url import cycle concerns
-	out := ""
-	for _, r := range s {
-		switch {
-		case r == ' ':
-			out += "%20"
-		case r == '+' || r == '&' || r == '?' || r == '#':
-			out += fmt.Sprintf("%%%02X", r)
-		default:
-			out += string(r)
-		}
-	}
-	return out
 }
 
 func min(a, b int) int {

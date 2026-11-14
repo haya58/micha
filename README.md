@@ -41,8 +41,10 @@ docker compose logs -f bot  # "bot started" が出ればDiscord接続成功
 3. 適用する：
 
 ```sh
-kubectl apply -f k8s/
+kubectl apply -k .
 ```
+
+`kustomization.yaml` が `k8s/` 内マニフェストと `persona/` 内ペルソナファイルを束ねる。デプロイ対象のペルソナに合わせて `kustomization.yaml` の `files` を書き換える。
 
 DinDサイドカー（`dind` コンテナ）が使い捨て実行を担い、Botは `DOCKER_HOST=tcp://localhost:2375` で接続する。`/healthz` がliveness/readiness probeに設定済みである。
 

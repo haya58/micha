@@ -102,11 +102,33 @@ func TestParseReactionChoice(t *testing.T) {
 		"":                "",
 		"notanalias":      "",
 		"thumbsup, heart": "",
+		"shion_dance":     "shion_dance",
 	}
 	for in, want := range cases {
-		if got := parseReactionChoice(in); got != want {
+		if got := parseReactionChoice(in, testEmojiTable()); got != want {
 			t.Fatalf("parseReactionChoice(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func testEmojiTable() map[string]string {
+	return customEmojiMap([]*discordgo.Emoji{
+		{Name: "shion_dance", ID: "111", Animated: true},
+		{Name: "fire", ID: "222"},
+	}, reactionEmojis)
+}
+
+func TestCustomEmojiMap(t *testing.T) {
+	table := testEmojiTable()
+	if table["shion_dance"] != "a:shion_dance:111" {
+		t.Fatalf("got %q", table["shion_dance"])
+	}
+	// Custom emoji wins over the same-named unicode alias.
+	if table["fire"] != "fire:222" {
+		t.Fatalf("got %q", table["fire"])
+	}
+	if table["heart"] != "❤️" {
+		t.Fatalf("unicode fallback lost: %q", table["heart"])
 	}
 }
 

@@ -47,7 +47,7 @@ internal/textutil          UTF-8安全な切詰・無効バイト除去
 
 - `docker/Dockerfile`：Alpine＋docker-cliの単一イメージ。
 - `docker/docker-compose.yml`：bot＋pgvector＋DinD。`EXTRA_DBS` でペルソナ用DBを自動作成する。DB初期化スクリプトはルートの `create-dbs.sh` をマウントする。
-- `k8s/`：Secret・ConfigMap・Deploymentに分割。TOML全体をSecret搭載しBotごとに複製する。
+- `k8s/`：Secret・Deployment＋Kustomization。`kustomization.yaml` が `persona/` 内ファイルをConfigMap化して束ねる。BotごとにSecretを複製しDB名を変える。
 
 ## 制約
 

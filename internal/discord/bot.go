@@ -21,18 +21,21 @@ import (
 
 // Bot wires Discord events to the LLM + store.
 type Bot struct {
-	cfg       *config.Config
-	session   *discordgo.Session
-	store     *store.Store
-	llm       *llm.Client
-	persona   string
-	botID     string
-	botName   string
-	readyOnce sync.Once
-	reactMu   sync.Mutex
-	lastReact map[string]time.Time
-	chNamesMu sync.Mutex
-	chNames   map[string]string
+	cfg          *config.Config
+	session      *discordgo.Session
+	store        *store.Store
+	llm          *llm.Client
+	persona      string
+	botID        string
+	botName      string
+	readyOnce    sync.Once
+	reactMu      sync.Mutex
+	lastReact    map[string]time.Time
+	emojiMu      sync.Mutex
+	emojiCache   map[string]string
+	emojiFetched time.Time
+	chNamesMu    sync.Mutex
+	chNames      map[string]string
 }
 
 func New(cfg *config.Config, st *store.Store, lc *llm.Client, persona string) (*Bot, error) {

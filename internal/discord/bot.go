@@ -215,7 +215,7 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 	if summary, imp, ok := memory.ShouldRemember(m.Content); ok {
 		embs, err := b.llm.Embed(ctx, []string{m.Content})
 		if err != nil {
-			log.Printf("[reply] embed failed (memory skipped): %v", err)
+			log.Printf("[reply] embed failed (memory skipped; check OPENAI_EMBEDDING_MODEL): %v", err)
 		} else if len(embs) > 0 {
 			scope := channelID
 			if threadID != nil {

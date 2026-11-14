@@ -283,7 +283,7 @@ func (c *Client) Embed(ctx context.Context, texts []string) ([][]float32, error)
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("embed status %d: %s (endpoint may not offer /embeddings)", resp.StatusCode, textutil.Truncate(string(raw), 300))
+		return nil, fmt.Errorf("embed status %d: %s", resp.StatusCode, textutil.Truncate(string(raw), 300))
 	}
 	var out struct {
 		Data []struct {

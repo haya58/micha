@@ -29,6 +29,8 @@ data:
   SHELL_IMAGE: "alpine:latest"
   # Mention-free mode: respond to every message in allowed channels.
   RESPOND_ALL: "false"
+  # Login notice channel. Empty = first channel of allowed categories.
+  LOGIN_NOTICE_CHANNEL_ID: ""
 ---
 apiVersion: v1
 kind: ConfigMap

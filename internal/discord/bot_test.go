@@ -72,6 +72,26 @@ func TestNilStatusNoop(t *testing.T) {
 	st.Done()           // must not panic
 }
 
+func TestLoginNoticeEmbed(t *testing.T) {
+	e := loginNoticeEmbed("ゆきな")
+	if e.Title != "ゆきながログインしました" {
+		t.Fatalf("got %q", e.Title)
+	}
+	if e.Color != 0x57F287 {
+		t.Fatalf("got %#x", e.Color)
+	}
+}
+
+func TestErrorReplyEmbedDistinct(t *testing.T) {
+	e := errorReplyEmbed()
+	if e.Color != 0xED4245 {
+		t.Fatalf("error embed must be red, got %#x", e.Color)
+	}
+	if e.Title == "" || e.Description == "" {
+		t.Fatal("error embed must carry a clear message")
+	}
+}
+
 func TestDelayedStatusStaysSilentWhenFast(t *testing.T) {
 	// time.Hour delay with nil session: Done before fire must never post
 	// and must not panic or leak the timer.

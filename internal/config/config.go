@@ -11,29 +11,30 @@ import (
 // One process = one persona = one guild + one logical DB (DATABASE_URL points to
 // a database dedicated to this bot/persona).
 type Config struct {
-	BotID              string
-	DisplayName        string
-	DiscordToken       string
-	GuildID            string
-	CategoryIDs        []string
-	DatabaseURL        string
-	OpenAIBaseURL      string
-	OpenAIAPIKey       string
-	OpenAIModel        string
-	OpenAIExtraHeaders map[string]string
-	EmbeddingModel     string
-	EmbeddingDim       int
-	BraveAPIKey        string
-	PersonaPath        string
-	RandomProb         float64
-	RandomCooldownSec  int
-	RespondAll         bool
-	HistoryLimit       int
-	MemoryTopK         int
-	ShellEnabled       bool
-	ShellImage         string
-	ShellTimeoutSec    int
-	HealthAddr         string
+	BotID                string
+	DisplayName          string
+	DiscordToken         string
+	GuildID              string
+	CategoryIDs          []string
+	DatabaseURL          string
+	OpenAIBaseURL        string
+	OpenAIAPIKey         string
+	OpenAIModel          string
+	OpenAIExtraHeaders   map[string]string
+	EmbeddingModel       string
+	EmbeddingDim         int
+	BraveAPIKey          string
+	PersonaPath          string
+	RandomProb           float64
+	RandomCooldownSec    int
+	RespondAll           bool
+	LoginNoticeChannelID string
+	HistoryLimit         int
+	MemoryTopK           int
+	ShellEnabled         bool
+	ShellImage           string
+	ShellTimeoutSec      int
+	HealthAddr           string
 }
 
 func getenv(key, def string) string {
@@ -45,27 +46,28 @@ func getenv(key, def string) string {
 
 func Load() (*Config, error) {
 	c := &Config{
-		BotID:             getenv("BOT_ID", "default-bot"),
-		DisplayName:       getenv("BOT_DISPLAY_NAME", "dis-llm-bot"),
-		DiscordToken:      os.Getenv("DISCORD_BOT_TOKEN"),
-		GuildID:           os.Getenv("DISCORD_GUILD_ID"),
-		DatabaseURL:       os.Getenv("DATABASE_URL"),
-		OpenAIBaseURL:     getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-		OpenAIAPIKey:      os.Getenv("OPENAI_API_KEY"),
-		OpenAIModel:       getenv("OPENAI_MODEL", "gpt-4o-mini"),
-		EmbeddingModel:    getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
-		EmbeddingDim:      1536,
-		BraveAPIKey:       os.Getenv("BRAVE_API_KEY"),
-		PersonaPath:       os.Getenv("PERSONA_PATH"),
-		RandomProb:        0.02,
-		RandomCooldownSec: 1800,
-		HistoryLimit:      20,
-		MemoryTopK:        5,
-		RespondAll:        os.Getenv("RESPOND_ALL") == "true",
-		ShellEnabled:      getenv("SHELL_ENABLED", "true") == "true",
-		ShellImage:        getenv("SHELL_IMAGE", "alpine:latest"),
-		ShellTimeoutSec:   30,
-		HealthAddr:        getenv("HEALTH_ADDR", ":8080"),
+		BotID:                getenv("BOT_ID", "default-bot"),
+		DisplayName:          getenv("BOT_DISPLAY_NAME", "dis-llm-bot"),
+		DiscordToken:         os.Getenv("DISCORD_BOT_TOKEN"),
+		GuildID:              os.Getenv("DISCORD_GUILD_ID"),
+		DatabaseURL:          os.Getenv("DATABASE_URL"),
+		OpenAIBaseURL:        getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+		OpenAIAPIKey:         os.Getenv("OPENAI_API_KEY"),
+		OpenAIModel:          getenv("OPENAI_MODEL", "gpt-4o-mini"),
+		EmbeddingModel:       getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
+		EmbeddingDim:         1536,
+		BraveAPIKey:          os.Getenv("BRAVE_API_KEY"),
+		PersonaPath:          os.Getenv("PERSONA_PATH"),
+		RandomProb:           0.02,
+		RandomCooldownSec:    1800,
+		HistoryLimit:         20,
+		MemoryTopK:           5,
+		RespondAll:           os.Getenv("RESPOND_ALL") == "true",
+		LoginNoticeChannelID: os.Getenv("LOGIN_NOTICE_CHANNEL_ID"),
+		ShellEnabled:         getenv("SHELL_ENABLED", "true") == "true",
+		ShellImage:           getenv("SHELL_IMAGE", "alpine:latest"),
+		ShellTimeoutSec:      30,
+		HealthAddr:           getenv("HEALTH_ADDR", ":8080"),
 	}
 	if v := os.Getenv("DISCORD_CATEGORY_IDS"); v != "" {
 		for _, s := range strings.Split(v, ",") {

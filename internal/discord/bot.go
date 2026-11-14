@@ -21,13 +21,14 @@ import (
 
 // Bot wires Discord events to the LLM + store.
 type Bot struct {
-	cfg     *config.Config
-	session *discordgo.Session
-	store   *store.Store
-	llm     *llm.Client
-	persona string
-	botID   string
-	botName string
+	cfg       *config.Config
+	session   *discordgo.Session
+	store     *store.Store
+	llm       *llm.Client
+	persona   string
+	botID     string
+	botName   string
+	readyOnce sync.Once
 }
 
 func New(cfg *config.Config, st *store.Store, lc *llm.Client, persona string) (*Bot, error) {
@@ -48,6 +49,45 @@ func (b *Bot) Close() error { return b.session.Close() }
 func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
 	b.botID = r.User.ID
 	b.botName = r.User.Username
+	// onReady fires on every reconnect; announce only once per process.
+	b.readyOnce.Do(func() { b.announceLogin() })
+}
+
+// announceLogin posts a "logged in" embed. Best-effort: failures are logged.
+func (b *Bot) announceLogin() {
+	channelID := b.cfg.LoginNoticeChannelID
+	if channelID == "" {
+		chs, err := b.ActiveChannels()
+		if err != nil || len(chs) == 0 {
+			log.Printf("[ready] no channel available for login notice")
+			return
+		}
+		channelID = chs[0].ChannelID
+	}
+	if !b.hasPermission(b.cfg.GuildID, channelID) {
+		log.Printf("[ready] no permission to post login notice in %s", channelID)
+		return
+	}
+	if _, err := b.session.ChannelMessageSendEmbed(channelID, loginNoticeEmbed(b.cfg.DisplayName)); err != nil {
+		log.Printf("[ready] login notice failed: %v", err)
+	}
+}
+
+func loginNoticeEmbed(displayName string) *discordgo.MessageEmbed {
+	return &discordgo.MessageEmbed{
+		Title:       fmt.Sprintf("%sがログインしました", displayName),
+		Description: "メンションで話しかけてね",
+		Color:       0x57F287,
+	}
+}
+
+// errorReplyEmbed marks a failed reply as an error, distinct from normal chat.
+func errorReplyEmbed() *discordgo.MessageEmbed {
+	return &discordgo.MessageEmbed{
+		Title:       "応答の生成に失敗しました",
+		Description: "ごめん、今うまく考えられなかった。もう一度言ってみて。",
+		Color:       0xED4245,
+	}
 }
 
 // scope resolves channel/thread and whether the message is in an allowed category.
@@ -146,13 +186,6 @@ func threadStr(threadID *string) string {
 	return *threadID
 }
 
-func scopeOf(channelID string, threadID *string) string {
-	if threadID != nil && *threadID != "" {
-		return *threadID
-	}
-	return channelID
-}
-
 func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID *string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
@@ -196,9 +229,13 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 	}
 	msgs = append(msgs, llm.ChatMessage{Role: "user", Content: m.Author.Username + ": " + enriched, Images: images})
 
+	scope := channelID
+	if threadID != nil {
+		scope = *threadID
+	}
 	reply, toolErr := b.chatWithTools(ctx, msgs, msgID, st, toolEnv{
 		guildID:   m.GuildID,
-		scopeKey:  scopeOf(channelID, threadID),
+		scopeKey:  scope,
 		channelID: m.ChannelID,
 		username:  m.Author.Username,
 	})
@@ -206,12 +243,15 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 	if toolErr != nil {
 		log.Printf("[reply] chat failed guild=%s ch=%s thread=%s msgID=%d hist=%d mem=%d: %v",
 			m.GuildID, channelID, threadStr(threadID), msgID, len(mctx.History), len(mctx.Memories), toolErr)
-		reply = "ごめん、今うまく考えられなかった。もう一度言ってみて。"
-	} else {
-		// The "Username: content" history format sometimes leaks into the
-		// model's own reply as a leading "bot-name:" prefix. Strip it.
-		reply = b.stripSelfPrefix(reply)
+		// Post a distinct error embed instead of a normal-looking reply.
+		if _, err := b.session.ChannelMessageSendEmbed(m.ChannelID, errorReplyEmbed()); err != nil {
+			log.Printf("[reply] error embed failed ch=%s msgID=%d: %v", m.ChannelID, msgID, err)
+		}
+		return
 	}
+	// The "Username: content" history format sometimes leaks into the
+	// model's own reply as a leading "bot-name:" prefix. Strip it.
+	reply = b.stripSelfPrefix(reply)
 	if err := b.sendSplit(m.ChannelID, reply); err != nil {
 		log.Printf("[reply] send failed ch=%s msgID=%d: %v", m.ChannelID, msgID, err)
 		return
@@ -230,10 +270,6 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 		if err != nil {
 			log.Printf("[reply] embed failed (memory skipped; check OPENAI_EMBEDDING_MODEL): %v", err)
 		} else if len(embs) > 0 {
-			scope := channelID
-			if threadID != nil {
-				scope = *threadID
-			}
 			fact := m.Author.Username + ": " + summary
 			if err := b.store.SaveMemory(ctx, m.GuildID, scope, "fact", fact, embs[0], imp); err != nil {
 				log.Printf("[reply] SaveMemory failed: %v", err)

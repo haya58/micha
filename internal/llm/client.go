@@ -176,7 +176,7 @@ func DefaultTools(shellEnabled bool) []ToolDef {
 		"required": []string{"url"},
 	}
 	tools[2].Function.Name = "remember"
-	tools[2].Function.Description = "Save a durable fact about the user or server for later conversations (preferences, personal details, commitments). Call when the user states something worth recalling, even in a short message."
+	tools[2].Function.Description = "Save a durable fact about the user or server for later conversations (preferences, personal details, commitments). Call when the user states something worth recalling, even in a short message. Do NOT call merely because the user shared a link or image; linked content is already available via fetch tools."
 	tools[2].Function.Parameters = map[string]any{
 		"type": "object",
 		"properties": map[string]any{

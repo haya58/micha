@@ -14,6 +14,36 @@ cp config.example.toml config.toml
 
 `config.toml` は秘密情報を含むため git 管理外である。手元で `go run` する場合は、`database_url` のホスト名 `db` が名前解決できるよう `/etc/hosts` に `127.0.0.1 db` を追加するか、接続先を手元のPostgresに書き換える。
 
+### 設定項目一覧
+
+| セクション | キー | 内容 | 既定値 |
+|---|---|---|---|
+| `bot` | `id` | Bot識別名（ログ表示用） | `default-bot` |
+| | `display_name` | Botの表示名（通知・履歴記録用） | `dis-llm-bot` |
+| | `respond_all` | メンション無し全発言に応答する | `false` |
+| `discord` | `token` ※ | Botトークン | — |
+| | `guild_id` ※ | 対象サーバID | — |
+| | `category_ids` ※ | 応答対象カテゴリID | — |
+| | `readonly_channel_ids` | 読取専用チャンネルID | 空 |
+| | `readonly_poll_sec` | 読取専用の取込間隔（秒） | `300` |
+| | `login_notice_channel_id` | ログイン通知先。空時は対象カテゴリ先頭 | 空 |
+| `database` | `url` ※ | 専用DBへの接続先 | — |
+| `openai` | `base_url` | OpenAI互換endpoint | `https://api.openai.com/v1` |
+| | `api_key` ※ | APIキー | — |
+| | `model` | 応答モデル | `gpt-4o-mini` |
+| | `embedding_model` | 記憶用embeddingモデル | `text-embedding-3-small` |
+| | `embedding_dim` | ベクトル次元（DBと一致させる） | `1536` |
+| | `extra_headers` | 追加HTTPヘッダ（例：`x-opencode-session`） | 空 |
+| `brave` | `api_key` | Brave検索キー（未設定時は検索不可） | 空 |
+| `persona` | `path` | ペルソナファイル。空時は内蔵既定 | 空 |
+| `random_talk` | `probability`／`cooldown_sec` | ランダム発言の確率・間隔 | `0.02`／`1800` |
+| `memory` | `history_limit`／`top_k` | 参照履歴件数・想起記憶件数 | `20`／`5` |
+| `reaction` | `probability`／`cooldown_sec` | リアクション確率・間隔 | `0.15`／`600` |
+| `shell` | `enabled`／`image`／`timeout_sec` | 使い捨て実行の可否・イメージ・上限 | 有効／`alpine:latest`／`30` |
+| `server` | `health_addr` | ヘルスチェック待受 | `:8080` |
+
+※は必須項目である。
+
 ## 手元での起動
 
 ```sh
@@ -36,7 +66,7 @@ docker compose logs -f bot  # "bot started" が出ればDiscord接続成功
 
 ## k8s環境へのデプロイ
 
-1. `deploy/k8s.yaml` の Secret `bot-config-toml` 内のTOML（トークン・ギルドID・カテゴリID・DB接続先）を置換する。
+1. `k8s/secret.yaml` のTOML（トークン・ギルドID・カテゴリID・DB接続先）を置換する。
 2. Bot（ペルソナ）ごとに Secret・Deployment を複製し、`database_url` のdbname部分だけ変える。
 3. 適用する：
 

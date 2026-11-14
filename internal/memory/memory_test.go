@@ -24,6 +24,26 @@ func TestShouldRememberLong(t *testing.T) {
 	}
 }
 
+func TestShouldRememberLinkOnly(t *testing.T) {
+	// A bare link share (typical tweet URL, 60+ chars) must not trigger
+	// memorization: URLs don't count toward the length threshold.
+	if _, _, ok := ShouldRemember("これ見て https://x.com/someuser/status/1234567890123456789"); ok {
+		t.Fatal("bare link share should not be remembered")
+	}
+	if _, _, ok := ShouldRemember("https://x.com/someuser/status/1234567890123456789"); ok {
+		t.Fatal("URL alone should not be remembered")
+	}
+	// Long personal text alongside a link is still remembered (URL kept).
+	content := "先週話した味噌ラーメンの店に昨日も行ってきたよ。やっぱりあの濃厚なスープは最高だったのでまた行きたい https://example.com/ramen-shop-review"
+	summary, _, ok := ShouldRemember(content)
+	if !ok {
+		t.Fatal("substantive message with a link should be remembered")
+	}
+	if !strings.Contains(summary, "味噌ラーメン") {
+		t.Fatalf("summary lost content: %q", summary)
+	}
+}
+
 func TestFormatPrompt(t *testing.T) {
 	mc := Context{
 		Memories: []store.Memory{

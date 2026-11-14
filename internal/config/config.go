@@ -27,6 +27,7 @@ type Config struct {
 	PersonaPath        string
 	RandomProb         float64
 	RandomCooldownSec  int
+	RespondAll         bool
 	HistoryLimit       int
 	MemoryTopK         int
 	ShellEnabled       bool
@@ -60,6 +61,7 @@ func Load() (*Config, error) {
 		RandomCooldownSec: 1800,
 		HistoryLimit:      20,
 		MemoryTopK:        5,
+		RespondAll:        os.Getenv("RESPOND_ALL") == "true",
 		ShellEnabled:      getenv("SHELL_ENABLED", "true") == "true",
 		ShellImage:        getenv("SHELL_IMAGE", "alpine:latest"),
 		ShellTimeoutSec:   30,

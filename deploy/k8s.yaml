@@ -27,6 +27,8 @@ data:
   OPENAI_EXTRA_HEADERS: ""
   SHELL_ENABLED: "true"
   SHELL_IMAGE: "alpine:latest"
+  # Mention-free mode: respond to every message in allowed channels.
+  RESPOND_ALL: "false"
 ---
 apiVersion: v1
 kind: ConfigMap

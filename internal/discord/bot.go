@@ -27,6 +27,7 @@ type Bot struct {
 	llm     *llm.Client
 	persona string
 	botID   string
+	botName string
 }
 
 func New(cfg *config.Config, st *store.Store, lc *llm.Client, persona string) (*Bot, error) {
@@ -46,6 +47,7 @@ func (b *Bot) Close() error { return b.session.Close() }
 
 func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
 	b.botID = r.User.ID
+	b.botName = r.User.Username
 }
 
 // scope resolves channel/thread and whether the message is in an allowed category.
@@ -117,6 +119,7 @@ func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		me, err := s.User("@me")
 		if err == nil {
 			b.botID = me.ID
+			b.botName = me.Username
 		}
 	}
 	channelID, threadID, ok := b.scope(m)
@@ -128,7 +131,7 @@ func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 	mentioned := isMentionOf(b.botID, m.Content, m.Mentions)
 	isReply := m.ReferencedMessage != nil && m.ReferencedMessage.Author != nil && m.ReferencedMessage.Author.ID == b.botID
-	if !mentioned && !isReply {
+	if !mentioned && !isReply && !b.cfg.RespondAll {
 		return // non-trigger messages are handled by the random scheduler
 	}
 	b.handleReply(m, channelID, threadID)
@@ -190,6 +193,10 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 		log.Printf("[reply] chat failed guild=%s ch=%s thread=%s msgID=%d hist=%d mem=%d: %v",
 			m.GuildID, channelID, threadStr(threadID), msgID, len(mctx.History), len(mctx.Memories), toolErr)
 		reply = "ごめん、今うまく考えられなかった。もう一度言ってみて。"
+	} else {
+		// The "Username: content" history format sometimes leaks into the
+		// model's own reply as a leading "bot-name:" prefix. Strip it.
+		reply = b.stripSelfPrefix(reply)
 	}
 	if err := b.sendSplit(m.ChannelID, reply); err != nil {
 		log.Printf("[reply] send failed ch=%s msgID=%d: %v", m.ChannelID, msgID, err)
@@ -213,11 +220,61 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 			if threadID != nil {
 				scope = *threadID
 			}
-			if err := b.store.SaveMemory(ctx, m.GuildID, scope, "fact", m.Author.Username+": "+summary, embs[0], imp); err != nil {
+			fact := m.Author.Username + ": " + summary
+			if err := b.store.SaveMemory(ctx, m.GuildID, scope, "fact", fact, embs[0], imp); err != nil {
 				log.Printf("[reply] SaveMemory failed: %v", err)
+			} else {
+				b.notifyRemembered(m.ChannelID, m.Author.Username, summary)
 			}
 		}
 	}
+}
+
+// notifyRemembered tells the channel that a new fact about the user was
+// memorized. Best-effort: failures are logged and ignored.
+func (b *Bot) notifyRemembered(channelID, username, summary string) {
+	_, err := b.session.ChannelMessageSendEmbed(channelID, &discordgo.MessageEmbed{
+		Title:       fmt.Sprintf("%sさんについて新しいことを覚えました！", username),
+		Description: textutil.Truncate(summary, 200),
+		Color:       0x57F287,
+	})
+	if err != nil {
+		log.Printf("[reply] memory notice failed: %v", err)
+	}
+}
+
+// stripSelfPrefix removes a leading "bot-name:" / mention prefix that the
+// model sometimes echoes from the "Username: content" history format.
+func (b *Bot) stripSelfPrefix(reply string) string {
+	names := []string{b.botName, b.cfg.DisplayName, "dis-llm-bot", "dls-llm-bot"}
+	var mentions []string
+	if b.botID != "" {
+		mentions = []string{"<@" + b.botID + ">", "<@!" + b.botID + ">"}
+	}
+	t := strings.TrimSpace(reply)
+	for changed := true; changed; {
+		changed = false
+		// Bare leading mention ("<@id> hello"), no colon.
+		for _, tok := range mentions {
+			if rest, ok := strings.CutPrefix(t, tok); ok {
+				t = strings.TrimSpace(rest)
+				changed = true
+			}
+		}
+		for _, n := range names {
+			n = strings.TrimSpace(n)
+			if n == "" {
+				continue
+			}
+			for _, sep := range []string{":", "："} {
+				if rest, ok := strings.CutPrefix(t, n+sep); ok {
+					t = strings.TrimSpace(rest)
+					changed = true
+				}
+			}
+		}
+	}
+	return t
 }
 
 func (b *Bot) chatWithTools(ctx context.Context, msgs []llm.ChatMessage, msgID int64, st *Status) (string, error) {
@@ -435,12 +492,13 @@ func (b *Bot) RandomSay(channelID string) {
 	if err != nil || strings.TrimSpace(out.Content) == "" || strings.TrimSpace(out.Content) == "SKIP" {
 		return
 	}
+	reply := b.stripSelfPrefix(out.Content)
 	if !b.hasPermission(b.cfg.GuildID, channelID) {
 		return
 	}
-	_ = b.sendSplit(channelID, out.Content)
+	_ = b.sendSplit(channelID, reply)
 	_, _ = b.store.SaveMessage(ctx, store.Message{
 		GuildID: b.cfg.GuildID, ChannelID: channelID,
-		UserID: b.botID, Username: b.cfg.DisplayName, Content: out.Content, Attachments: "[]",
+		UserID: b.botID, Username: b.cfg.DisplayName, Content: reply, Attachments: "[]",
 	})
 }

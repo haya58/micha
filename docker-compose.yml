@@ -18,6 +18,7 @@ services:
       OPENAI_EXTRA_HEADERS: ${OPENAI_EXTRA_HEADERS:-}
       BRAVE_API_KEY: ${BRAVE_API_KEY:-}
       PERSONA_PATH: ${PERSONA_PATH:-}
+      RESPOND_ALL: ${RESPOND_ALL:-false}
       SHELL_ENABLED: "true"
       SHELL_IMAGE: ${SHELL_IMAGE:-alpine:latest}
     ports:

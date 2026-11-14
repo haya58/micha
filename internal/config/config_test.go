@@ -83,3 +83,26 @@ func TestLoadExtraHeaders(t *testing.T) {
 		t.Fatalf("got %v", c.OpenAIExtraHeaders)
 	}
 }
+
+func TestRespondAllDefaultOff(t *testing.T) {
+	setRequired(t)
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if c.RespondAll {
+		t.Fatal("RESPOND_ALL should default to false")
+	}
+}
+
+func TestRespondAllOn(t *testing.T) {
+	setRequired(t)
+	t.Setenv("RESPOND_ALL", "true")
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !c.RespondAll {
+		t.Fatal("RESPOND_ALL=true should enable mention-free mode")
+	}
+}

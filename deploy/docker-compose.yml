@@ -1,0 +1,55 @@
+services:
+  # One postgres SERVER shared by all bots; each bot/persona uses its own
+  # DATABASE (same server, different dbname). Extra DBs are created at init
+  # from EXTRA_DBS. App settings come from ../config.toml (CONFIG_PATH);
+  # environment variables are not read by the app.
+  bot:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    environment:
+      CONFIG_PATH: /config.toml
+      # Talk to the dind sidecar over plaintext TCP (TLS disabled there).
+      DOCKER_HOST: tcp://dind:2375
+    ports:
+      - "8085:8080"
+    depends_on:
+      - db
+      - dind
+    volumes:
+      - ../persona:/persona:ro
+      - ../config.toml:/config.toml:ro
+
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: bot
+      POSTGRES_PASSWORD: botpass
+      POSTGRES_DB: botdb
+      EXTRA_DBS: ${EXTRA_DBS:-}
+    volumes:
+      - botdb:/var/lib/postgresql/data
+      - ./db-init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+
+  # Second bot example (same postgres server, different config file):
+  #   bot-kuro:
+  #     extends: bot
+  #     volumes:
+  #       - ../persona:/persona:ro
+  #       - ../config-kuro.toml:/config.toml:ro
+  # ...plus EXTRA_DBS=botdb_kuro on the db service (or CREATE DATABASE manually).
+
+  # Disposable shell executor sidecar (network isolated per exec via --network none)
+  dind:
+    image: docker:dind
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    volumes:
+      - dind-certs:/certs/client
+
+volumes:
+  botdb:
+  dind-certs:

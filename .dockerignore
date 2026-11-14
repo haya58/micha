@@ -1,11 +1,12 @@
 # Secrets and local-only files must not enter the build context.
 .env
+config.toml
+config-*.toml
 .git/
 # Docs and deploy manifests are not needed to build the binary.
 README.md
 persona/
-migrations/
-docker/
 deploy/
+!deploy/Dockerfile
 # NOTE: internal/persona/default.md must stay included:
 # the final image copies it to /persona/default.md.

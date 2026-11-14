@@ -41,13 +41,13 @@ internal/textutil          UTF-8安全な切詰・無効バイト除去
 
 ## 設定
 
-主要な環境変数は `BOT_ID`・`DISCORD_BOT_TOKEN`・`DISCORD_GUILD_ID`・`DISCORD_CATEGORY_IDS`・`READONLY_CHANNEL_IDS`・`READONLY_POLL_SEC`・`DATABASE_URL`・`OPENAI_*`・`BRAVE_API_KEY`・`PERSONA_PATH`・`RESPOND_ALL`・`SHELL_*`・`HEALTH_ADDR` である。TOMLファイル（`CONFIG_PATH`、雛形は `config.example.toml`）でも指定でき、優先度は既定値＜TOML＜環境変数である。
+設定の唯一の供給源はTOMLファイル（`CONFIG_PATH`、既定 `./config.toml`、雛形は `config.example.toml`）である。環境変数は参照しない（`CONFIG_PATH` 自体を除く）。
 
 ## デプロイ
 
-- `Dockerfile`：Alpine＋docker-cliの単一イメージ。
-- `docker-compose.yml`：bot＋pgvector＋DinD。`EXTRA_DBS` でペルソナ用DBを自動作成する。
-- `deploy/k8s.yaml`：Deployment＋DinDサイドカー。Botごとに複製しDB名を変える。
+- `deploy/Dockerfile`：Alpine＋docker-cliの単一イメージ。
+- `deploy/docker-compose.yml`：bot＋pgvector＋DinD。`EXTRA_DBS` でペルソナ用DBを自動作成する。
+- `deploy/k8s.yaml`：Deployment＋DinDサイドカー。TOML全体をSecret搭載しBotごとに複製する。
 
 ## 制約
 

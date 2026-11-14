@@ -7,3 +7,5 @@ docs/Checklist.md
 
 # Local development overrides (not shared)
 docker/docker-compose.override.yml
+
+/botdb

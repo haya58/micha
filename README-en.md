@@ -1,3 +1,7 @@
+<p align="center">
+  <a href='./README.md'>日本語</a> | <a href='./README-en.md'> English </a>
+</p>
+
 # Micha
 
 <p align="center">
@@ -10,6 +14,14 @@ It is simple and robust, while providing the features expected of a modern LLM c
 
 Why Micha ?
 → Inspired by [Micha Jawkân-chan](https://www.symphogear-gx.com/characters/micha.php)
+
+<p align="center">
+  <img src="docs/images/cap1.gif" alt="cap1" width="600">
+</p>
+
+<p align="center">
+  <img src="docs/images/cap3.gif" alt="cap3" width="600">
+</p>
 
 ## Features
 Micha can do the following.

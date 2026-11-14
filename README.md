@@ -93,8 +93,9 @@ vim config.toml
 | `persona` | `path` | Bot の人格を定義するペルソナファイル。未設定の場合、デフォルトのペルソナを使用 | 空 |
 | `random_talk` | `probability` | Bot がチャンネルでランダム発言する確率 | `0.02` |
 | `random_talk` | `cooldown_sec` | Bot がチャンネルでランダム発言する間隔(秒) | `1800` |
-| `memory` | `history_limit` | Bot が参照するチャットの履歴件数 | `20` |
-| `memory` | `top_k` | Bot が想起する記憶の件数 | `5` |
+| `memory` | `history_limit` | Bot が参照するチャットの履歴件数 | `30` |
+| `memory` | `top_k` | Bot が想起する記憶の件数 | `8` |
+| `memory` | `readonly_per_channel` | 読取専用チャンネル毎に参照する話題件数 | `5` |
 | `reaction` | `probability` | Bot が絵文字でリアクションする確率 | `0.15` |
 | `reaction` | `cooldown_sec` | Bot が絵文字でリアクションする間隔(秒) | `600` |
 | `shell` | `enabled` | Bot によるシェルコマンド実行可否 | `true` |
@@ -119,6 +120,15 @@ docker compose logs -f bot  # "bot started" が出ればOK
   - Botは `DOCKER_HOST=tcp://dind:2375` で接続する。
 - 同一ホストで複数Botを運用する場合は、ペルソナごとにTOMLファイル（例：`config-kuro.toml`）を用意し、`docker-compose.yml` のマウント先を変えたサービスを追加すること。
   - DBは `create-dbs.sh` で自動作成する。
+
+### 自前で Postgres サーバを用意する場合
+以下のようにして `botdb` データベースを作成しておく。 
+```
+CREATE DATABASE micha OWNER bot;
+\c botdb
+CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+```
 
 ## k8s環境へのデプロイ
 -  `k8s/secret.yaml` 内の config.toml を編集する

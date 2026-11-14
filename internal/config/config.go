@@ -51,8 +51,9 @@ type Config struct {
 		CooldownSec int     `toml:"cooldown_sec"`
 	} `toml:"random_talk"`
 	Memory struct {
-		HistoryLimit int `toml:"history_limit"`
-		TopK         int `toml:"top_k"`
+		HistoryLimit       int `toml:"history_limit"`
+		TopK               int `toml:"top_k"`
+		ReadonlyPerChannel int `toml:"readonly_per_channel"`
 	} `toml:"memory"`
 	Reaction struct {
 		Probability float64 `toml:"probability"`
@@ -81,8 +82,9 @@ func defaults() *Config {
 	c.Bot.DisplayName = "micha-bot"
 	c.RandomTalk.Probability = 0.02
 	c.RandomTalk.CooldownSec = 1800
-	c.Memory.HistoryLimit = 20
-	c.Memory.TopK = 5
+	c.Memory.HistoryLimit = 30
+	c.Memory.TopK = 8
+	c.Memory.ReadonlyPerChannel = 5
 	c.Reaction.Probability = 0.15
 	c.Reaction.CooldownSec = 600
 	c.Discord.ReadonlyPollSec = 300

@@ -299,16 +299,10 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 	mctx := memory.Build(ctx, b.store, b.llm, m.GuildID, channelID, threadID, b.cfg.Memory.HistoryLimit, b.cfg.Memory.TopK, m.Content)
 
 	// Background from read-only channels (periodic polling stores them).
-	if ids := b.cfg.Discord.ReadonlyChannelIDs; len(ids) > 0 {
-		if ro, err := b.store.RecentFromChannels(ctx, m.GuildID, ids, 10); err != nil {
-			log.Printf("[reply] readonly context failed: %v", err)
-		} else if len(ro) > 0 {
-			mctx.Readonly = ro
-			mctx.ReadonlyNames = map[string]string{}
-			for _, rm := range ro {
-				mctx.ReadonlyNames[rm.ChannelID] = b.channelName(rm.ChannelID)
-			}
-		}
+	// Per-channel quotas keep one busy channel from crowding out the rest.
+	if ro, names := b.readonlyContext(ctx, m.GuildID); len(ro) > 0 {
+		mctx.Readonly = ro
+		mctx.ReadonlyNames = names
 	}
 
 	system := b.persona + "\n\nServer time: " + time.Now().Format(time.RFC3339) + "\n" + memory.FormatPrompt(mctx)
@@ -565,6 +559,39 @@ func isToolError(result string) bool {
 	return false
 }
 
+// readonlyContext gathers recent messages from read-only channels with a
+// per-channel quota, merged newest-first and capped at quota*channels.
+func (b *Bot) readonlyContext(ctx context.Context, guildID string) ([]store.Message, map[string]string) {
+	ids := b.cfg.Discord.ReadonlyChannelIDs
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	n := b.cfg.Memory.ReadonlyPerChannel
+	if n <= 0 {
+		n = 5
+	}
+	lists := make([][]store.Message, 0, len(ids))
+	for _, id := range ids {
+		ms, err := b.store.RecentByScope(ctx, guildID, id, nil, n)
+		if err != nil {
+			log.Printf("[readonly] context failed ch=%s: %v", id, err)
+			continue
+		}
+		lists = append(lists, ms)
+	}
+	merged := memory.MergeNewest(lists, n*len(ids))
+	if len(merged) == 0 {
+		return nil, nil
+	}
+	names := make(map[string]string, len(ids))
+	for _, m := range merged {
+		if _, ok := names[m.ChannelID]; !ok {
+			names[m.ChannelID] = b.channelName(m.ChannelID)
+		}
+	}
+	return merged, names
+}
+
 // enrichContent notes image attachments (URLs are passed to the LLM as
 // vision image_url parts by the caller) and pre-fetches the first URL in
 // the message so the LLM has concrete material.
@@ -675,18 +702,11 @@ func (b *Bot) RandomSay(channelID string) {
 			break
 		}
 	}
-	mctx := memory.Build(ctx, b.store, b.llm, guildID, channelID, nil, 8, 3, query)
+	mctx := memory.Build(ctx, b.store, b.llm, guildID, channelID, nil, b.cfg.Memory.HistoryLimit, b.cfg.Memory.TopK, query)
 	// Surface read-only channel topics so random talk can pick them up.
-	if ids := b.cfg.Discord.ReadonlyChannelIDs; len(ids) > 0 {
-		if ro, err := b.store.RecentFromChannels(ctx, guildID, ids, 5); err != nil {
-			log.Printf("[random] readonly context failed: %v", err)
-		} else if len(ro) > 0 {
-			mctx.Readonly = ro
-			mctx.ReadonlyNames = map[string]string{}
-			for _, rm := range ro {
-				mctx.ReadonlyNames[rm.ChannelID] = b.channelName(rm.ChannelID)
-			}
-		}
+	if ro, names := b.readonlyContext(ctx, guildID); len(ro) > 0 {
+		mctx.Readonly = ro
+		mctx.ReadonlyNames = names
 	}
 	var msgs []llm.ChatMessage
 	msgs = append(msgs, llm.ChatMessage{Role: "system", Content: b.persona + "\nYou may start a light casual conversation. Keep it short. You may pick up topics from other channels or memories shown above. If nothing interesting comes to mind, reply with exactly: SKIP\n" + memory.FormatPrompt(mctx)})

@@ -42,3 +42,24 @@ func TestFormatPromptReadonly(t *testing.T) {
 		}
 	}
 }
+
+func TestMergeNewest(t *testing.T) {
+	a := []store.Message{{ID: 1}, {ID: 5}, {ID: 9}}
+	b := []store.Message{{ID: 2}, {ID: 7}}
+	got := MergeNewest([][]store.Message{a, b, nil}, 0)
+	want := []int64{9, 7, 5, 2, 1}
+	if len(got) != len(want) {
+		t.Fatalf("got %v", got)
+	}
+	for i, id := range want {
+		if got[i].ID != id {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
+	if got := MergeNewest([][]store.Message{a, b}, 3); len(got) != 3 || got[0].ID != 9 {
+		t.Fatalf("limit not applied: %v", got)
+	}
+	if got := MergeNewest(nil, 10); len(got) != 0 {
+		t.Fatalf("expected empty, got %v", got)
+	}
+}

@@ -28,6 +28,7 @@ func main() {
 		log.Fatalf("db: %v", err)
 	}
 	defer st.Close()
+	log.Printf("db connected and migrated (messages, memories, tool_runs)")
 
 	personaText, err := persona.Load(cfg.PersonaPath)
 	if err != nil {

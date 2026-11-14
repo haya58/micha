@@ -16,7 +16,12 @@ Micha  (ミカ と発音) は Discord コミュニティをより盛り上げる
 - Bot は使い捨てコンテナでの簡易的なシェルコマンド実行可能
 - Kubernetes へのデプロイにネイティブに対応
 
-## Getting started
+## クイックスタート
+### 事前準備
+- Discord Developer ポータルページでアプリケーションを作成し、Bot トークンを入手
+  - Privileged Intent を有効にしてください
+- 検索機能を有効にしたい場合、Brave API キーを入手
+
 ### 初期設定
 設定は `config.toml` のみから読み込む。
 config.toml のパスは `CONFIG_PATH` にて指定する。
@@ -39,9 +44,9 @@ vim config.toml
 | | `category_ids` * | Bot が応答するカテゴリID | — |
 | | `readonly_channel_ids` | ここで指定したチャンネルを Bot は定期巡回し、話題を収集する | 空 |
 | | `readonly_poll_sec` | 読取専用の取込間隔（秒） | `300` |
-| | `login_notice_channel_id` | ログイン時の通知先。空の場合、は対象カテゴリの先頭のチャンネル | 空 |
+| | `login_notice_channel_id` | ログイン時の通知先。空の場合は対象カテゴリの先頭のチャンネル | 空 |
 | `database` | `url` * | Postgres DBへの接続URL | — |
-| `openai` | `base_url` | OpenAI互換のエンドポイントt | `https://api.openai.com/v1` |
+| `openai` | `base_url` | OpenAI互換のエンドポイント | `https://api.openai.com/v1` |
 | | `api_key` * | OpenAI の API キー | — |
 | | `model` | チャット応答に利用するモデル | `gpt-4o-mini` |
 | | `embedding_model` | 長期記憶用 embedding モデル | `text-embedding-3-small` |
@@ -63,6 +68,7 @@ vim config.toml
 *は必須項目である。
 
 ### Docker Compose での起動
+初期設定を済ませてから実行する
 ```sh
 git clone https://github.com/haya58/micha.git
 cd docker
@@ -75,23 +81,22 @@ docker compose logs -f bot  # "bot started" が出ればOK
 - シェル実行用にDinD（`dind` サービス）が同梱される
   - Botは `DOCKER_HOST=tcp://dind:2375` で接続する。
 - 同一ホストで複数Botを運用する場合は、ペルソナごとにTOMLファイル（例：`config-kuro.toml`）を用意し、`docker-compose.yml` のマウント先を変えたサービスを追加すること。
-<!-- これなんだ？そんな手順あったっけ -->
-  - DBは `EXTRA_DBS` で自動作成する。
+  - DBは `create-dbs.sh` で自動作成する。
 
 ## k8s環境へのデプロイ
-
-1. `k8s/secret.yaml` のTOML（トークン・ギルドID・カテゴリID・DB接続先）を置換する。
-2. Bot（ペルソナ）ごとに Secret・Deployment を複製し、`database_url` のdbname部分だけ変える。
-3. 適用する：
+-  `k8s/secret.yaml` 内の config.toml を編集する
+- 適用する
 
 ```sh
 kubectl apply -k .
 ```
-
-`kustomization.yaml` が `k8s/` 内マニフェストと `persona/` 内ペルソナファイルを束ねる。デプロイ対象のペルソナに合わせて `kustomization.yaml` の `files` を書き換える。
+- Bot（ペルソナ）を複数起動する場合、Bot ごとに Secret・Deployment を複製し、`database_url` のdbname のみ変える。
+- `kustomization.yaml` が `k8s/` 内マニフェストと `persona/` 内ペルソナファイルを束ねる。
+- デプロイ対象のペルソナに合わせて `kustomization.yaml` の `files` を書き換える。
 
 DinDサイドカー（`dind` コンテナ）が使い捨て実行を担い、Botは `DOCKER_HOST=tcp://localhost:2375` で接続する。`/healthz` がliveness/readiness probeに設定済みである。
 
-## 継続的デリバリ
+## Docker イメージのビルド
 
-`main` ブランチへのpushで `.github/workflows/docker-publish.yml` がLinux/AMD64イメージをビルドし、`ghcr.io/<owner>/<repo>:latest` と short SHAタグでプッシュする。
+- `main` ブランチへのpushで `.github/workflows/docker-publish.yml` が Linux/amd64 イメージをビルド
+- `ghcr.io/<owner>/<repo>:latest` と short SHAタグでプッシュ

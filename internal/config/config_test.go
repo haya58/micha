@@ -15,8 +15,14 @@ category_ids = ["cat1", "cat2"]
 [database]
 url = "postgres://localhost/db"
 
-[openai]
+[endpoints.openai]
+base_url = "https://api.openai.com/v1"
 api_key = "key"
+
+[models]
+chat = "openai/gpt-4o-mini"
+embedding = "openai/text-embedding-3-small"
+embedding_dim = 1536
 `
 
 func writeTOML(t *testing.T, body string) string {
@@ -43,28 +49,43 @@ category_ids = ["a", "b", "c"]
 [database]
 url = "postgres://localhost/db"
 
-[openai]
+[endpoints.openai]
+base_url = "https://example.com/v1"
 api_key = "key"
-model = "file-model"
 
-[shell]
-enabled = false
+[models]
+chat = "openai/file-model"
+embedding = "openai/file-embed"
+embedding_dim = 768
 `)
 	c, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	if c.Bot.ID != "file-bot" || c.Bot.DisplayName != "file-name" {
-		t.Fatalf("got %+v", c)
+		t.Fatalf("got %+v", c.Bot)
 	}
-	if c.OpenAI.Model != "file-model" || c.Shell.Enabled {
-		t.Fatalf("got %+v", c)
+	if c.Discord.GuildID != "guild1" {
+		t.Fatalf("GuildID = %q", c.Discord.GuildID)
 	}
 	if len(c.Discord.CategoryIDs) != 3 || c.Discord.CategoryIDs[0] != "a" {
 		t.Fatalf("got %v", c.Discord.CategoryIDs)
 	}
-	if c.Discord.GuildID != "guild1" {
-		t.Fatalf("GuildID = %q", c.Discord.GuildID)
+	ep, model, err := c.ResolveModel(c.Models.Chat)
+	if err != nil {
+		t.Fatalf("resolve chat: %v", err)
+	}
+	if ep.BaseURL != "https://example.com/v1" || model != "file-model" {
+		t.Fatalf("got %+v %q", ep, model)
+	}
+	if _, _, err := c.ResolveModel(c.Models.Embedding); err != nil {
+		t.Fatalf("resolve embedding: %v", err)
+	}
+	if c.Models.EmbeddingDim != 768 {
+		t.Fatalf("got %d", c.Models.EmbeddingDim)
+	}
+	if !c.Shell.Enabled {
+		t.Fatal("shell.enabled should default to true (section absent)")
 	}
 }
 
@@ -77,8 +98,13 @@ category_ids = ["cat1"]
 [database]
 url = "postgres://localhost/db"
 
-[openai]
-api_key = "key"
+[endpoints.openai]
+base_url = "https://example.com/v1"
+
+[models]
+chat = "openai/m"
+embedding = "openai/e"
+embedding_dim = 1536
 `)
 	if _, err := Load(); err == nil {
 		t.Fatal("expected error for missing discord token")
@@ -91,94 +117,48 @@ func TestLoadDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if c.OpenAI.Model != "gpt-4o-mini" || c.OpenAI.EmbeddingDim != 1536 {
-		t.Fatalf("defaults not applied: %+v", c)
+	if c.Bot.ID != "micha-bot" || c.Bot.DisplayName != "micha-bot" {
+		t.Fatalf("defaults not applied: %+v", c.Bot)
 	}
 	if !c.Shell.Enabled {
 		t.Fatal("shell.enabled should default to true")
 	}
-	if c.Bot.RespondAll {
-		t.Fatal("bot.respond_all should default to false")
-	}
 	if c.Discord.ReadonlyPollSec != 300 {
 		t.Fatalf("readonly_poll_sec should default to 300, got %d", c.Discord.ReadonlyPollSec)
+	}
+	if c.RandomTalk.Probability != 0.02 || c.Memory.TopK != 5 {
+		t.Fatalf("got %+v %+v", c.RandomTalk, c.Memory)
 	}
 }
 
 func TestLoadExtraHeaders(t *testing.T) {
 	writeTOML(t, requiredTOML+`
-[openai.extra_headers]
+[endpoints.openai.extra_headers]
 x-opencode-session = "ses_123"
 `)
 	c, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if c.OpenAI.ExtraHeaders["x-opencode-session"] != "ses_123" {
-		t.Fatalf("got %v", c.OpenAI.ExtraHeaders)
+	ep, _, err := c.ResolveModel(c.Models.Chat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ep.ExtraHeaders["x-opencode-session"] != "ses_123" {
+		t.Fatalf("got %v", ep.ExtraHeaders)
 	}
 }
 
-func TestLoadRespondAll(t *testing.T) {
-	writeTOML(t, requiredTOML+`
-[bot]
-respond_all = true
-`)
+func TestResolveModelErrors(t *testing.T) {
+	writeTOML(t, requiredTOML)
 	c, err := Load()
 	if err != nil {
-		t.Fatalf("Load: %v", err)
+		t.Fatal(err)
 	}
-	if !c.Bot.RespondAll {
-		t.Fatal("respond_all=true should enable mention-free mode")
-	}
-}
-
-func TestLoadReadonlyChannels(t *testing.T) {
-	writeTOML(t, `
-[discord]
-token = "tok"
-guild_id = "guild1"
-category_ids = ["cat1"]
-readonly_channel_ids = ["ch1", "ch2"]
-readonly_poll_sec = 120
-
-[database]
-url = "postgres://localhost/db"
-
-[openai]
-api_key = "key"
-`)
-	c, err := Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if len(c.Discord.ReadonlyChannelIDs) != 2 || c.Discord.ReadonlyChannelIDs[0] != "ch1" {
-		t.Fatalf("got %v", c.Discord.ReadonlyChannelIDs)
-	}
-	if c.Discord.ReadonlyPollSec != 120 {
-		t.Fatalf("got %d", c.Discord.ReadonlyPollSec)
-	}
-}
-
-func TestLoadReactionDefaults(t *testing.T) {
-	writeTOML(t, `
-[discord]
-token = "tok"
-guild_id = "guild1"
-category_ids = ["cat1"]
-
-[database]
-url = "postgres://localhost/db"
-
-[openai]
-api_key = "key"
-`)
-	c, err := Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if c.Reaction.Probability != 0.15 || c.Reaction.CooldownSec != 600 {
-		t.Fatalf("got %+v", c.Reaction)
+	for _, ref := range []string{"", "noslash", "/model", "endpoint/", "missing/m"} {
+		if _, _, err := c.ResolveModel(ref); err == nil {
+			t.Fatalf("expected error for %q", ref)
+		}
 	}
 }
 

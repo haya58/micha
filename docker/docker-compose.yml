@@ -17,8 +17,12 @@ services:
       - db
       - dind
     volumes:
-      - ../persona:/persona:ro
-      - ../config.toml:/config.toml:ro
+      - type: bind
+        source: ../persona
+        target: /persona
+      - type: bind
+        source: ../config.toml
+        target: /config.toml
 
   db:
     image: pgvector/pgvector:pg16
@@ -28,8 +32,12 @@ services:
       POSTGRES_DB: botdb
       EXTRA_DBS: ${EXTRA_DBS:-}
     volumes:
-      - botdb:/var/lib/postgresql/data
-      - ../create-dbs.sh:/docker-entrypoint-initdb.d/create-dbs.sh:ro
+      - type: bind
+        source: ../botdb
+        target: /var/lib/postgresql/data
+      - type: bind
+        source: ../create-dbs.sh
+        target: /docker-entrypoint-initdb.d/create-dbs.sh
     ports:
       - "5432:5432"
 
@@ -51,5 +59,4 @@ services:
       - dind-certs:/certs/client
 
 volumes:
-  botdb:
   dind-certs:

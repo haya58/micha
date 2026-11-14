@@ -2,6 +2,7 @@
 .env
 config.toml
 config-*.toml
+botdb/
 .git/
 # Docs and deploy manifests are not needed to build the binary.
 README.md

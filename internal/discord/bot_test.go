@@ -12,7 +12,7 @@ import (
 
 func newTestConfig(categories []string) *config.Config {
 	c := &config.Config{}
-	c.Bot.DisplayName = "my-bot"
+	c.Bot.DisplayName = "micha-bot"
 	c.Discord.CategoryIDs = categories
 	return c
 }
@@ -187,15 +187,15 @@ func TestStripSelfPrefix(t *testing.T) {
 		botName: "dis-llm-bot",
 	}
 	cases := map[string]string{
-		"dis-llm-bot: こんにちは":       "こんにちは",
-		"dls-llm-bot： やっほー":        "やっほー",
-		"my-bot: hello":            "hello",
-		"<@123> こんにちは":             "こんにちは",
-		"<@!123> こんにちは":            "こんにちは",
-		"dis-llm-bot: my-bot: ネスト": "ネスト",
-		"結論：これは残る":                 "結論：これは残る",
-		"ただの本文":                    "ただの本文",
-		"dis-llm-bot":              "dis-llm-bot", // no separator: untouched
+		"dis-llm-bot: こんにちは":          "こんにちは",
+		"dls-llm-bot： やっほー":           "やっほー",
+		"micha-bot: hello":            "hello",
+		"<@123> こんにちは":                "こんにちは",
+		"<@!123> こんにちは":               "こんにちは",
+		"dis-llm-bot: micha-bot: ネスト": "ネスト",
+		"結論：これは残る":                    "結論：これは残る",
+		"ただの本文":                       "ただの本文",
+		"dis-llm-bot":                 "dis-llm-bot", // no separator: untouched
 	}
 	for in, want := range cases {
 		if got := b.stripSelfPrefix(in); got != want {

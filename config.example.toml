@@ -3,8 +3,8 @@
 # ファイルパスは CONFIG_PATH 環境変数で指定する（既定: ./config.toml）。
 
 [bot]
-id = "my-bot"
-display_name = "my-bot"
+id = "micha-bot"
+display_name = "micha-bot"
 respond_all = false
 
 [discord]
@@ -19,13 +19,15 @@ login_notice_channel_id = ""
 # ペルソナごとにDB名を変える（同一サーバ共用可）
 url = "postgres://bot:botpass@localhost:5432/botdb?sslmode=disable"
 
-[openai]
+[endpoints.openai]
 base_url = "https://api.openai.com/v1"
 api_key = ""
-model = "gpt-4o-mini"
-embedding_model = "text-embedding-3-small"
-embedding_dim = 1536
 # extra_headers = { "x-opencode-session" = "ses_xxx" }
+
+[models]
+chat = "openai/gpt-4o-mini"
+embedding = "openai/text-embedding-3-small"
+embedding_dim = 1536
 
 [brave]
 api_key = ""

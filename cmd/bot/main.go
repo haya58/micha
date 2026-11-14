@@ -23,7 +23,7 @@ func main() {
 		log.Fatalf("config: %v", err)
 	}
 	ctx := context.Background()
-	st, err := store.Connect(ctx, cfg.Database.URL, cfg.OpenAI.EmbeddingDim)
+	st, err := store.Connect(ctx, cfg.Database.URL, cfg.Models.EmbeddingDim)
 	if err != nil {
 		log.Fatalf("db: %v", err)
 	}
@@ -34,7 +34,18 @@ func main() {
 	if err != nil {
 		log.Fatalf("persona: %v", err)
 	}
-	lc := llm.New(cfg.OpenAI.BaseURL, cfg.OpenAI.APIKey, cfg.OpenAI.Model, cfg.OpenAI.EmbeddingModel, cfg.OpenAI.ExtraHeaders)
+	endpoints := make(map[string]llm.Endpoint, len(cfg.Endpoints))
+	for name, ep := range cfg.Endpoints {
+		endpoints[name] = llm.Endpoint{
+			BaseURL:      ep.BaseURL,
+			APIKey:       ep.APIKey,
+			ExtraHeaders: ep.ExtraHeaders,
+		}
+	}
+	lc, err := llm.New(endpoints, cfg.Models.Chat, cfg.Models.Embedding)
+	if err != nil {
+		log.Fatalf("llm: %v", err)
+	}
 
 	b, err := dbot.New(cfg, st, lc, personaText)
 	if err != nil {
@@ -44,7 +55,7 @@ func main() {
 		log.Fatalf("discord open: %v", err)
 	}
 	defer b.Close()
-	log.Printf("bot started guild=%s categories=%v model=%s", cfg.Discord.GuildID, cfg.Discord.CategoryIDs, cfg.OpenAI.Model)
+	log.Printf("bot started guild=%s categories=%v chat=%s embedding=%s", cfg.Discord.GuildID, cfg.Discord.CategoryIDs, cfg.Models.Chat, cfg.Models.Embedding)
 
 	// health endpoint for k8s/docker
 	mux := http.NewServeMux()

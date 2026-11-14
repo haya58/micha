@@ -41,6 +41,17 @@ func TestDefaultToolsWithoutShell(t *testing.T) {
 	}
 }
 
+func testClient(baseURL string, extra map[string]string) *Client {
+	c, err := New(
+		map[string]Endpoint{"test": {BaseURL: baseURL, APIKey: "key", ExtraHeaders: extra}},
+		"test/model", "test/embed",
+	)
+	if err != nil {
+		panic(err)
+	}
+	return c
+}
+
 func TestExtraHeadersSent(t *testing.T) {
 	var gotSession, gotAuth string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -49,7 +60,7 @@ func TestExtraHeadersSent(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL, "key", "model", "embed", map[string]string{"x-opencode-session": "ses_123"})
+	c := testClient(srv.URL, map[string]string{"x-opencode-session": "ses_123"})
 	msg, err := c.Chat(context.Background(), []ChatMessage{{Role: "user", Content: "hi"}}, nil)
 	if err != nil {
 		t.Fatalf("Chat: %v", err)
@@ -122,7 +133,7 @@ func TestChatFallsBackToCompletionTokens(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL, "key", "model", "embed", nil)
+	c := testClient(srv.URL, nil)
 	msg, err := c.Chat(context.Background(), []ChatMessage{{Role: "user", Content: "hi"}}, nil)
 	if err != nil {
 		t.Fatalf("Chat: %v", err)
@@ -156,7 +167,7 @@ func TestChatReasoningEffortFallback(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL, "key", "model", "embed", nil)
+	c := testClient(srv.URL, nil)
 	msg, err := c.Chat(context.Background(), []ChatMessage{{Role: "user", Content: "hi"}}, DefaultTools(true))
 	if err != nil {
 		t.Fatalf("Chat: %v", err)
@@ -181,7 +192,7 @@ func TestChatUnrelated400DoesNotRetry(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL, "key", "model", "embed", nil)
+	c := testClient(srv.URL, nil)
 	if _, err := c.Chat(context.Background(), []ChatMessage{{Role: "user", Content: "hi"}}, nil); err == nil {
 		t.Fatal("expected error")
 	}

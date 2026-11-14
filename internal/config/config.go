@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -32,14 +33,13 @@ type Config struct {
 	Database struct {
 		URL string `toml:"url"`
 	} `toml:"database"`
-	OpenAI struct {
-		BaseURL        string            `toml:"base_url"`
-		APIKey         string            `toml:"api_key"`
-		Model          string            `toml:"model"`
-		ExtraHeaders   map[string]string `toml:"extra_headers"`
-		EmbeddingModel string            `toml:"embedding_model"`
-		EmbeddingDim   int               `toml:"embedding_dim"`
-	} `toml:"openai"`
+	Endpoints map[string]Endpoint `toml:"endpoints"`
+	Models    struct {
+		// "<endpoint>/<model>", e.g. "opencode/kimi-k3".
+		Chat         string `toml:"chat"`
+		Embedding    string `toml:"embedding"`
+		EmbeddingDim int    `toml:"embedding_dim"`
+	} `toml:"models"`
 	Brave struct {
 		APIKey string `toml:"api_key"`
 	} `toml:"brave"`
@@ -68,14 +68,17 @@ type Config struct {
 	} `toml:"server"`
 }
 
+// Endpoint is one named OpenAI-compatible API deployment.
+type Endpoint struct {
+	BaseURL      string            `toml:"base_url"`
+	APIKey       string            `toml:"api_key"`
+	ExtraHeaders map[string]string `toml:"extra_headers"`
+}
+
 func defaults() *Config {
 	c := &Config{}
-	c.Bot.ID = "default-bot"
-	c.Bot.DisplayName = "dis-llm-bot"
-	c.OpenAI.BaseURL = "https://api.openai.com/v1"
-	c.OpenAI.Model = "gpt-4o-mini"
-	c.OpenAI.EmbeddingModel = "text-embedding-3-small"
-	c.OpenAI.EmbeddingDim = 1536
+	c.Bot.ID = "micha-bot"
+	c.Bot.DisplayName = "micha-bot"
 	c.RandomTalk.Probability = 0.02
 	c.RandomTalk.CooldownSec = 1800
 	c.Memory.HistoryLimit = 20
@@ -87,6 +90,7 @@ func defaults() *Config {
 	c.Shell.Image = "alpine:latest"
 	c.Shell.TimeoutSec = 30
 	c.Server.HealthAddr = ":8080"
+	c.Models.EmbeddingDim = 1536
 	return c
 }
 
@@ -120,8 +124,27 @@ func Load() (*Config, error) {
 	if c.Database.URL == "" {
 		return nil, fmt.Errorf("database.url is required (dedicated DB per bot/persona)")
 	}
-	if c.OpenAI.APIKey == "" {
-		return nil, fmt.Errorf("openai.api_key is required")
+	if _, _, err := c.ResolveModel(c.Models.Chat); err != nil {
+		return nil, fmt.Errorf("models.chat: %w", err)
+	}
+	if _, _, err := c.ResolveModel(c.Models.Embedding); err != nil {
+		return nil, fmt.Errorf("models.embedding: %w", err)
+	}
+	if c.Models.EmbeddingDim <= 0 {
+		return nil, fmt.Errorf("models.embedding_dim must be positive (match the embedding model)")
 	}
 	return c, nil
+}
+
+// ResolveModel splits an "<endpoint>/<model>" reference.
+func (c *Config) ResolveModel(ref string) (Endpoint, string, error) {
+	i := strings.Index(ref, "/")
+	if i <= 0 || i == len(ref)-1 {
+		return Endpoint{}, "", fmt.Errorf("want <endpoint>/<model>, got %q", ref)
+	}
+	ep, ok := c.Endpoints[ref[:i]]
+	if !ok {
+		return Endpoint{}, "", fmt.Errorf("unknown endpoint %q", ref[:i])
+	}
+	return ep, ref[i+1:], nil
 }

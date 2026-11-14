@@ -15,32 +15,61 @@ import (
 	"dis-llm-bot/internal/textutil"
 )
 
-type Client struct {
+// Endpoint is one named OpenAI-compatible API deployment.
+type Endpoint struct {
 	BaseURL      string
 	APIKey       string
-	Model        string
-	EmbedModel   string
 	ExtraHeaders map[string]string
-	HTTP         *http.Client
 }
 
-func New(baseURL, apiKey, model, embedModel string, extraHeaders map[string]string) *Client {
-	baseURL = strings.TrimRight(baseURL, "/")
+type Client struct {
+	ChatEndpoint  Endpoint
+	ChatModel     string
+	EmbedEndpoint Endpoint
+	EmbedModel    string
+	HTTP          *http.Client
+}
+
+// New builds a client from resolved endpoints.
+// Refs use "<endpoint-name>/<model>" and are looked up in endpoints.
+func New(endpoints map[string]Endpoint, chatRef, embedRef string) (*Client, error) {
+	chatEp, chatModel, err := resolve(endpoints, chatRef)
+	if err != nil {
+		return nil, fmt.Errorf("chat model: %w", err)
+	}
+	embedEp, embedModel, err := resolve(endpoints, embedRef)
+	if err != nil {
+		return nil, fmt.Errorf("embedding model: %w", err)
+	}
 	return &Client{
-		BaseURL: baseURL, APIKey: apiKey, Model: model, EmbedModel: embedModel,
-		ExtraHeaders: extraHeaders,
-		HTTP:         &http.Client{Timeout: 120 * time.Second},
-	}
+		ChatEndpoint:  chatEp,
+		ChatModel:     chatModel,
+		EmbedEndpoint: embedEp,
+		EmbedModel:    embedModel,
+		HTTP:          &http.Client{Timeout: 120 * time.Second},
+	}, nil
 }
 
-// setHeaders applies default auth headers plus endpoint-specific extras
-// (e.g. x-opencode-session required by some OpenAI-compatible gateways).
-func (c *Client) setHeaders(req *http.Request) {
-	req.Header.Set("Content-Type", "application/json")
-	if c.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+func resolve(endpoints map[string]Endpoint, ref string) (Endpoint, string, error) {
+	i := strings.Index(ref, "/")
+	if i <= 0 || i == len(ref)-1 {
+		return Endpoint{}, "", fmt.Errorf("want <endpoint>/<model>, got %q", ref)
 	}
-	for k, v := range c.ExtraHeaders {
+	ep, ok := endpoints[ref[:i]]
+	if !ok {
+		return Endpoint{}, "", fmt.Errorf("unknown endpoint %q", ref[:i])
+	}
+	return ep, ref[i+1:], nil
+}
+
+// setHeaders applies auth plus endpoint-specific extra headers
+// (e.g. x-opencode-session required by some OpenAI-compatible gateways).
+func (c *Client) setHeaders(req *http.Request, ep Endpoint) {
+	req.Header.Set("Content-Type", "application/json")
+	if ep.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+ep.APIKey)
+	}
+	for k, v := range ep.ExtraHeaders {
 		req.Header.Set(k, v)
 	}
 }
@@ -249,7 +278,7 @@ func (c *Client) Chat(ctx context.Context, msgs []ChatMessage, tools []ToolDef) 
 
 func (c *Client) postChat(ctx context.Context, msgs []ChatMessage, tools []ToolDef, maxTokensKey string, withTemp bool, reasoningEffort *string) (ChatMessage, error) {
 	payload := map[string]any{
-		"model": c.Model, "messages": msgs, maxTokensKey: 1500,
+		"model": c.ChatModel, "messages": msgs, maxTokensKey: 1500,
 	}
 	if withTemp {
 		payload["temperature"] = 0.8
@@ -261,8 +290,9 @@ func (c *Client) postChat(ctx context.Context, msgs []ChatMessage, tools []ToolD
 		payload["tools"] = tools
 	}
 	body, _ := json.Marshal(payload)
-	req, _ := http.NewRequestWithContext(ctx, "POST", c.BaseURL+"/chat/completions", bytes.NewReader(body))
-	c.setHeaders(req)
+	base := strings.TrimRight(c.ChatEndpoint.BaseURL, "/")
+	req, _ := http.NewRequestWithContext(ctx, "POST", base+"/chat/completions", bytes.NewReader(body))
+	c.setHeaders(req, c.ChatEndpoint)
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return ChatMessage{}, err
@@ -287,8 +317,9 @@ func (c *Client) postChat(ctx context.Context, msgs []ChatMessage, tools []ToolD
 
 func (c *Client) Embed(ctx context.Context, texts []string) ([][]float32, error) {
 	body, _ := json.Marshal(map[string]any{"model": c.EmbedModel, "input": texts})
-	req, _ := http.NewRequestWithContext(ctx, "POST", c.BaseURL+"/embeddings", bytes.NewReader(body))
-	c.setHeaders(req)
+	base := strings.TrimRight(c.EmbedEndpoint.BaseURL, "/")
+	req, _ := http.NewRequestWithContext(ctx, "POST", base+"/embeddings", bytes.NewReader(body))
+	c.setHeaders(req, c.EmbedEndpoint)
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return nil, err

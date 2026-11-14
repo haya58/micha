@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"dis-llm-bot/internal/llm"
@@ -36,6 +37,21 @@ func Build(ctx context.Context, st *store.Store, lc *llm.Client, guildID, channe
 	}
 	c.Memories = mems
 	return c
+}
+
+// MergeNewest merges per-channel histories (each oldest-first) into one
+// newest-first list capped at limit. Used to give every read-only channel
+// a fair share of context instead of one busy channel crowding out the rest.
+func MergeNewest(lists [][]store.Message, limit int) []store.Message {
+	var all []store.Message
+	for _, l := range lists {
+		all = append(all, l...)
+	}
+	sort.Slice(all, func(i, j int) bool { return all[i].ID > all[j].ID })
+	if limit > 0 && len(all) > limit {
+		all = all[:limit]
+	}
+	return all
 }
 
 func FormatPrompt(mc Context) string {

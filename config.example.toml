@@ -38,8 +38,9 @@ probability = 0.02
 cooldown_sec = 1800
 
 [memory]
-history_limit = 20
-top_k = 5
+history_limit = 30
+top_k = 8
+readonly_per_channel = 10
 
 [reaction]
 probability = 0.15

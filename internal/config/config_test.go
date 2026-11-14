@@ -126,8 +126,11 @@ func TestLoadDefaults(t *testing.T) {
 	if c.Discord.ReadonlyPollSec != 300 {
 		t.Fatalf("readonly_poll_sec should default to 300, got %d", c.Discord.ReadonlyPollSec)
 	}
-	if c.RandomTalk.Probability != 0.02 || c.Memory.TopK != 5 {
+	if c.RandomTalk.Probability != 0.02 || c.Memory.TopK != 8 {
 		t.Fatalf("got %+v %+v", c.RandomTalk, c.Memory)
+	}
+	if c.Memory.ReadonlyPerChannel != 10 {
+		t.Fatalf("readonly_per_channel should default to 10, got %d", c.Memory.ReadonlyPerChannel)
 	}
 }
 

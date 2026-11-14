@@ -1,22 +1,35 @@
 # Micha
+
+<p align="center">
+  <img src="docs/images/micha_logo.png" alt="Micha" width="600">
+</p>
+
 ## Overview
 Micha (pronounced "Mika") is an LLM chat bot application that enlivens Discord communities.
 It is simple and robust, while providing the features expected of a modern LLM chat bot.
 
+Why Micha ?
+→ Inspired by [Micha Jawkân-chan](https://www.symphogear-gx.com/characters/micha.php)
+
 ## Features
+### Chat
 - Chat bot that interacts with users through chat on Discord servers
-- Supports both the genuine OpenAI API and OpenAI-compatible APIs
-  - Verified to work with the OpenCode Go API
 - Safety-conscious design that restricts the categories where the bot can talk or read
 - Persona and instructions configurable in Markdown format
+### Memory & Research
 - Advanced long-term memory integrated with a pgvector-backed database (with deduplication)
 - Fetching text and images from X (Twitter) links
 - Periodic patrol of read-only channels with topic reflection
+### Models
+- Supports both the genuine OpenAI API and OpenAI-compatible APIs
+  - Verified to work with the OpenCode Go API
 - Multiple API endpoints can be registered
   - For example, use the OpenCode Go API for text chat while using the genuine OpenAI API only for Embedding
+### Interactions
 - Interaction features
   - Spontaneous messages from the bot
   - Random interactions with emoji
+### Runtime
 - Simple shell command execution in disposable containers
 - Native support for deployment to Kubernetes
 

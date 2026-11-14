@@ -1,22 +1,44 @@
 # Micha
+
+<p align="center">
+  <img src="docs/images/micha_logo.png" alt="Micha" width="600">
+</p>
+
 ## 概要
 Micha  (ミカ と発音) は Discord コミュニティをより盛り上げるための LLM チャット Bot アプリケーションです。
 シンプルで堅牢ながら、現代の LLM チャット Bot に必要な機能を備えています。
 
+Why Micha ?
+→ Inspired by [Micha Jawkân-chan](https://www.symphogear-gx.com/characters/micha.php)
+
+<p align="center">
+  <img src="docs/images/cap1.gif" alt="cap1" width="600">
+</p>
+
+<p align="center">
+  <img src="docs/images/cap3.gif" alt="cap3" width="600">
+</p>
+
+
 ## 特徴
+### チャット
 - Discord サーバでユーザとチャットを通じて交流するチャットBot
-- OpenAI 純正 API と OpenAI 互換の API に対応
-  - OpenCode Go の API で動作確認済
 - Bot が会話したり、読み取ったりできるカテゴリを制限可能な安全性に配慮した設計
 - Bot へ設定する人格や指示を Markdown 形式で指定可能
+### 記憶・調査
 - pgvector で構築したデータベースと連携した高度な長期記憶機能（重複排除あり）
 - X(Twitter)リンク内の本文・画像取得
 - 読み取り専用チャンネルの定期巡回と話題反映
+### モデル
+- OpenAI 純正 API と OpenAI 互換の API に対応
+  - OpenCode Go の API で動作確認済
 - API エンドポイントを複数登録可能
   - たとえばテキストチャットには OpenCode Go の API を利用し、Embedding にのみ OpenAI 純正API を利用するなどの使い方が可能
+### インタラクション
 - インタラクション機能
   - Bot からの自発的な発言
   - 絵文字によるランダムなインタラクション
+### 実行環境
 - Bot は使い捨てコンテナでの簡易的なシェルコマンド実行可能
 - Kubernetes へのデプロイにネイティブに対応
 

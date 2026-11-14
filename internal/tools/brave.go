@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	"dis-llm-bot/internal/textutil"
 )
 
 // braveSearchBaseURL is a var so tests can point it at a local server.
@@ -39,7 +41,7 @@ func BraveSearch(ctx context.Context, apiKey, query string, count int) (string, 
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode >= 300 {
-		return "", fmt.Errorf("brave status %d: %.300s", resp.StatusCode, raw)
+		return "", fmt.Errorf("brave status %d: %s", resp.StatusCode, textutil.Truncate(string(raw), 300))
 	}
 	var parsed struct {
 		Web struct {
@@ -51,28 +53,15 @@ func BraveSearch(ctx context.Context, apiKey, query string, count int) (string, 
 		} `json:"web"`
 	}
 	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return string(raw)[:min(2000, len(raw))], nil
+		return textutil.Truncate(string(raw), 2000), nil
 	}
 	out := ""
 	for i, r := range parsed.Web.Results {
-		desc := r.Description
-		if len(desc) > 400 {
-			desc = desc[:400]
-		}
+		desc := textutil.Truncate(r.Description, 400)
 		out += fmt.Sprintf("[%d] %s\n%s\n%s\n\n", i+1, r.Title, r.URL, desc)
 	}
 	if out == "" {
 		out = "no results"
 	}
-	if len(out) > 4000 {
-		out = out[:4000]
-	}
-	return out, nil
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
+	return textutil.Truncate(out, 4000), nil
 }

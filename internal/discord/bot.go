@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -16,6 +17,7 @@ import (
 	"dis-llm-bot/internal/llm"
 	"dis-llm-bot/internal/memory"
 	"dis-llm-bot/internal/store"
+	"dis-llm-bot/internal/textutil"
 	"dis-llm-bot/internal/tools"
 )
 
@@ -231,10 +233,19 @@ func (b *Bot) chatWithTools(ctx context.Context, msgs []llm.ChatMessage, msgID i
 		}
 		log.Printf("[llm] chat step=%d msgID=%d toolCalls=%v", step, msgID, names)
 		cur = append(cur, out)
-		for _, tc := range out.ToolCalls {
-			res := b.runTool(ctx, tc, msgID)
-			cur = append(cur, llm.ChatMessage{Role: "tool", ToolCallID: tc.ID, Content: res})
+		// Run independent tool calls concurrently (results keep call order).
+		toolMsgs := make([]llm.ChatMessage, len(out.ToolCalls))
+		var wg sync.WaitGroup
+		for i, tc := range out.ToolCalls {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				res := b.runTool(ctx, tc, msgID)
+				toolMsgs[i] = llm.ChatMessage{Role: "tool", ToolCallID: tc.ID, Content: res}
+			}()
 		}
+		wg.Wait()
+		cur = append(cur, toolMsgs...)
 	}
 	// final answer without tools
 	out, err := b.llm.Chat(ctx, cur, nil)
@@ -292,10 +303,7 @@ func (b *Bot) runTool(ctx context.Context, tc llm.ToolCall, msgID int64) string 
 	if err := b.store.SaveToolRun(ctx, &msgID, tc.Function.Name, tc.Function.Arguments, result, int(time.Since(start).Milliseconds())); err != nil {
 		log.Printf("[tool] SaveToolRun failed: %v", err)
 	}
-	snip := result
-	if len(snip) > 300 {
-		snip = snip[:300] + "..."
-	}
+	snip := textutil.Truncate(result, 300)
 	log.Printf("[tool] %s msgID=%d latency=%dms err=%v result=%.300q",
 		tc.Function.Name, msgID, int(time.Since(start).Milliseconds()),
 		isToolError(result), snip)
@@ -330,10 +338,7 @@ func (b *Bot) enrichContent(ctx context.Context, m *discordgo.MessageCreate) str
 	// first http URL in content: fetch text eagerly (tool remains for follow-ups)
 	if u := firstURL(content); u != "" {
 		if txt, err := tools.FetchPage(ctx, u); err == nil {
-			if len(txt) > 3000 {
-				txt = txt[:3000]
-			}
-			content += "\n\n[linked page content]\n" + txt
+			content += "\n\n[linked page content]\n" + textutil.Truncate(txt, 3000)
 		} else {
 			log.Printf("[enrich] link prefetch failed %s: %v", u, err)
 		}

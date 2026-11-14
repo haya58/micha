@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os/exec"
 	"time"
+
+	"dis-llm-bot/internal/textutil"
 )
 
 // ExecShell runs a command in a disposable container with NO network.
@@ -33,9 +35,9 @@ func ExecShell(ctx context.Context, image, command string, timeoutSec int) (stri
 		cmd.Stdout = &buf
 		cmd.Stderr = &buf
 		runErr := cmd.Run()
-		out := buf.String()
-		if len(out) > 8000 {
-			out = out[:8000] + "\n...[truncated]"
+		out := textutil.Truncate(buf.String(), 8000)
+		if len([]rune(buf.String())) > 8000 {
+			out += "\n...[truncated]"
 		}
 		if runErr != nil {
 			return fmt.Sprintf("exit error: %v\n%s", runErr, out), nil

@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"dis-llm-bot/internal/textutil"
 )
 
 // FetchPage downloads a URL and extracts rough readable text.
@@ -45,10 +47,7 @@ func FetchPage(ctx context.Context, rawURL string) (string, error) {
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 	text := stripHTML(string(raw))
-	if len(text) > 12000 {
-		text = text[:12000]
-	}
-	return fmt.Sprintf("URL: %s\n\n%s", rawURL, text), nil
+	return fmt.Sprintf("URL: %s\n\n%s", rawURL, textutil.Truncate(text, 12000)), nil
 }
 
 func stripHTML(s string) string {
@@ -82,8 +81,5 @@ func stripHTML(s string) string {
 	}
 	parts := strings.Fields(b.String())
 	out := strings.Join(parts, " ")
-	if len(out) > 15000 {
-		out = out[:15000]
-	}
-	return out
+	return textutil.Truncate(out, 15000)
 }

@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"dis-llm-bot/internal/textutil"
 )
 
 //go:embed schema.sql
@@ -163,9 +165,8 @@ func (s *Store) SearchMemories(ctx context.Context, guildID string, emb []float3
 }
 
 func (s *Store) SaveToolRun(ctx context.Context, messageID *int64, tool, args, result string, latencyMs int) error {
-	if len(result) > 8000 {
-		result = result[:8000]
-	}
+	// Clean is defence in depth: Postgres rejects invalid UTF-8 outright.
+	result = textutil.Clean(textutil.Truncate(result, 8000))
 	_, err := s.Pool.Exec(ctx, `
 		INSERT INTO tool_runs(message_id, tool_name, args, result, latency_ms)
 		VALUES($1,$2,$3::jsonb,$4,$5)`,

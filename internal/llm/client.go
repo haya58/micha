@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"dis-llm-bot/internal/textutil"
 )
 
 type Client struct {
@@ -144,17 +146,17 @@ func (c *Client) Chat(ctx context.Context, msgs []ChatMessage, tools []ToolDef) 
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if resp.StatusCode >= 300 {
-		return ChatMessage{}, fmt.Errorf("chat status %d: %.300s", resp.StatusCode, raw)
+		return ChatMessage{}, fmt.Errorf("chat status %d: %s", resp.StatusCode, textutil.Truncate(string(raw), 300))
 	}
 	var out chatResp
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return ChatMessage{}, fmt.Errorf("chat decode: %v body=%.300s", err, raw)
+		return ChatMessage{}, fmt.Errorf("chat decode: %v body=%s", err, textutil.Truncate(string(raw), 300))
 	}
 	if out.Error != nil {
 		return ChatMessage{}, fmt.Errorf("llm error: %s", out.Error.Message)
 	}
 	if len(out.Choices) == 0 {
-		return ChatMessage{}, fmt.Errorf("llm: no choices body=%.300s", raw)
+		return ChatMessage{}, fmt.Errorf("llm: no choices body=%s", textutil.Truncate(string(raw), 300))
 	}
 	return out.Choices[0].Message, nil
 }
@@ -170,7 +172,7 @@ func (c *Client) Embed(ctx context.Context, texts []string) ([][]float32, error)
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("embed status %d: %.300s (endpoint may not offer /embeddings)", resp.StatusCode, raw)
+		return nil, fmt.Errorf("embed status %d: %s (endpoint may not offer /embeddings)", resp.StatusCode, textutil.Truncate(string(raw), 300))
 	}
 	var out struct {
 		Data []struct {

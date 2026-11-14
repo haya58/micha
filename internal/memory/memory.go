@@ -7,6 +7,7 @@ import (
 
 	"dis-llm-bot/internal/llm"
 	"dis-llm-bot/internal/store"
+	"dis-llm-bot/internal/textutil"
 )
 
 // Context bundles history + relevant long-term memories for prompt building.
@@ -55,8 +56,5 @@ func ShouldRemember(content string) (string, int, bool) {
 	if len([]rune(t)) < 40 {
 		return "", 0, false
 	}
-	if len(t) > 500 {
-		t = t[:500]
-	}
-	return t, 1, true
+	return textutil.Truncate(t, 500), 1, true
 }

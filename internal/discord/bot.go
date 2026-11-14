@@ -699,14 +699,24 @@ func (b *Bot) RandomSay(channelID string) {
 	}
 	msgs = append(msgs, llm.ChatMessage{Role: "user", Content: "何か一言どうぞ（つまらなければSKIPとだけ返して）"})
 	out, err := b.llm.Chat(ctx, msgs, nil)
-	if err != nil || strings.TrimSpace(out.Content) == "" || strings.TrimSpace(out.Content) == "SKIP" {
+	if err != nil {
+		log.Printf("[random] llm failed ch=%s: %v", channelID, err)
+		return
+	}
+	if strings.TrimSpace(out.Content) == "" || strings.TrimSpace(out.Content) == "SKIP" {
+		log.Printf("[random] skipped ch=%s (SKIP)", channelID)
 		return
 	}
 	reply := b.stripSelfPrefix(out.Content)
 	if !b.hasPermission(b.cfg.Discord.GuildID, channelID) {
+		log.Printf("[random] no permission ch=%s", channelID)
 		return
 	}
-	_ = b.sendSplit(channelID, reply)
+	if err := b.sendSplit(channelID, reply); err != nil {
+		log.Printf("[random] send failed ch=%s: %v", channelID, err)
+		return
+	}
+	log.Printf("[random] said ch=%s replyLen=%d", channelID, len(reply))
 	_, _ = b.store.SaveMessage(ctx, store.Message{
 		GuildID: b.cfg.Discord.GuildID, ChannelID: channelID,
 		UserID: b.botID, Username: b.cfg.Bot.DisplayName, Content: reply, Attachments: "[]",

@@ -1,6 +1,4 @@
-# dis-llm-bot 設定ファイル (TOML)
-# 読み込み優先度: ビルトイン既定値 < 本ファイル。環境変数は CONFIG_PATH を除き参照しない。
-# ファイルパスは CONFIG_PATH 環境変数で指定する（既定: ./config.toml）。
+# ファイルパスは CONFIG_PATH 環境変数で指定する（既定: ./config.toml）
 
 [bot]
 id = "micha-bot"
@@ -16,7 +14,7 @@ readonly_poll_sec = 300
 login_notice_channel_id = ""
 
 [database]
-# ペルソナごとにDB名を変える（同一サーバ共用可）
+# BotごとにDB名を変える
 url = "postgres://bot:botpass@localhost:5432/botdb?sslmode=disable"
 
 [endpoints.openai]

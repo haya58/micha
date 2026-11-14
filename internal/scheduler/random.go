@@ -21,7 +21,9 @@ func RandomTalk(cfg *config.Config, b *discord.Bot, stop <-chan struct{}) {
 		case <-stop:
 			return
 		case <-ticker.C:
-			if r.Float64() > cfg.RandomTalk.Probability*15 { // 5-min tick scaled
+			// Per-tick chance is probability*15 (tick is 5 min).
+			if r.Float64() > cfg.RandomTalk.Probability*15 {
+				log.Printf("[random] tick skipped by probability")
 				continue
 			}
 			chs, err := b.ActiveChannels()
@@ -30,9 +32,11 @@ func RandomTalk(cfg *config.Config, b *discord.Bot, stop <-chan struct{}) {
 			}
 			ch := chs[r.Intn(len(chs))]
 			if time.Since(lastTalk[ch.ChannelID]) < time.Duration(cfg.RandomTalk.CooldownSec)*time.Second {
+				log.Printf("[random] tick skipped by cooldown ch=%s", ch.ChannelID)
 				continue
 			}
 			lastTalk[ch.ChannelID] = time.Now()
+			log.Printf("[random] triggered ch=%s", ch.ChannelID)
 			b.RandomSay(ch.ChannelID)
 		}
 	}

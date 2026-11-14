@@ -149,6 +149,10 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 	log.Printf("[reply] trigger guild=%s ch=%s thread=%s user=%s msg=%.80q",
 		m.GuildID, channelID, threadStr(threadID), m.Author.Username, m.Content)
 
+	// Show a working embed while the reply is prepared; updated per tool
+	// phase by runTool and removed once the reply is sent.
+	st := postStatus(b.session, m.ChannelID, "考え中……", "回答を準備しています")
+
 	attachmentsJSON, _ := json.Marshal(m.Attachments)
 	stMsg := store.Message{
 		GuildID: m.GuildID, ChannelID: channelID, ThreadID: threadID,
@@ -180,7 +184,8 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 	}
 	msgs = append(msgs, llm.ChatMessage{Role: "user", Content: m.Author.Username + ": " + enriched, Images: images})
 
-	reply, toolErr := b.chatWithTools(ctx, msgs, msgID)
+	reply, toolErr := b.chatWithTools(ctx, msgs, msgID, st)
+	st.Done()
 	if toolErr != nil {
 		log.Printf("[reply] chat failed guild=%s ch=%s thread=%s msgID=%d hist=%d mem=%d: %v",
 			m.GuildID, channelID, threadStr(threadID), msgID, len(mctx.History), len(mctx.Memories), toolErr)
@@ -215,7 +220,7 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 	}
 }
 
-func (b *Bot) chatWithTools(ctx context.Context, msgs []llm.ChatMessage, msgID int64) (string, error) {
+func (b *Bot) chatWithTools(ctx context.Context, msgs []llm.ChatMessage, msgID int64, st *Status) (string, error) {
 	toolDefs := llm.DefaultTools(b.cfg.ShellEnabled)
 	cur := append([]llm.ChatMessage{}, msgs...)
 	for step := 0; step < 3; step++ {
@@ -241,7 +246,7 @@ func (b *Bot) chatWithTools(ctx context.Context, msgs []llm.ChatMessage, msgID i
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				res := b.runTool(ctx, tc, msgID)
+				res := b.runTool(ctx, tc, msgID, st)
 				toolMsgs[i] = llm.ChatMessage{Role: "tool", ToolCallID: tc.ID, Content: res}
 			}()
 		}
@@ -256,12 +261,15 @@ func (b *Bot) chatWithTools(ctx context.Context, msgs []llm.ChatMessage, msgID i
 	return out.Content, nil
 }
 
-func (b *Bot) runTool(ctx context.Context, tc llm.ToolCall, msgID int64) string {
+func (b *Bot) runTool(ctx context.Context, tc llm.ToolCall, msgID int64, st *Status) string {
 	start := time.Now()
 	// Cap each tool call so one hanging site/endpoint can't stall the reply.
 	// SaveToolRun below still uses the parent ctx so the record persists.
 	tctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
+	if title, desc := statusTextForTool(tc.Function.Name, tc.Function.Arguments); st != nil {
+		st.Update(title, desc)
+	}
 	var args map[string]any
 	_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
 	var result string

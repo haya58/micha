@@ -4,9 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -163,7 +161,10 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 	}
 
 	// Enrich user content with image/link context before LLM call.
-	enriched := b.enrichContent(ctx, m)
+	enriched, images := b.enrichContent(ctx, m)
+	if len(images) > 0 {
+		log.Printf("[reply] attaching %d image(s) as vision input msgID=%d", len(images), msgID)
+	}
 
 	mctx := memory.Build(ctx, b.store, b.llm, m.GuildID, channelID, threadID, b.cfg.HistoryLimit, b.cfg.MemoryTopK, m.Content)
 
@@ -177,7 +178,7 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 		}
 		msgs = append(msgs, llm.ChatMessage{Role: role, Content: h.Username + ": " + h.Content})
 	}
-	msgs = append(msgs, llm.ChatMessage{Role: "user", Content: m.Author.Username + ": " + enriched})
+	msgs = append(msgs, llm.ChatMessage{Role: "user", Content: m.Author.Username + ": " + enriched, Images: images})
 
 	reply, toolErr := b.chatWithTools(ctx, msgs, msgID)
 	if toolErr != nil {
@@ -324,19 +325,16 @@ func isToolError(result string) bool {
 	return false
 }
 
-// enrichContent downloads image attachments (for vision notes) and pre-fetches
-// the first URL in the message so the LLM has concrete material.
-func (b *Bot) enrichContent(ctx context.Context, m *discordgo.MessageCreate) string {
+// enrichContent notes image attachments (URLs are passed to the LLM as
+// vision image_url parts by the caller) and pre-fetches the first URL in
+// the message so the LLM has concrete material.
+func (b *Bot) enrichContent(ctx context.Context, m *discordgo.MessageCreate) (string, []string) {
 	content := m.Content
-	// image attachments: download to verify + note for the model
+	var images []string
 	for _, a := range m.Attachments {
 		if strings.HasPrefix(a.ContentType, "image/") {
-			if data, ct, err := downloadBytes(ctx, a.URL); err == nil {
-				content += fmt.Sprintf("\n[attached image %s (%s, %d bytes) — user shared this image; describe/react to it]", a.Filename, ct, len(data))
-			} else {
-				log.Printf("[enrich] image download failed %s: %v", a.URL, err)
-				content += fmt.Sprintf("\n[attached image %s could not be downloaded: %v]", a.Filename, err)
-			}
+			images = append(images, a.URL)
+			content += fmt.Sprintf("\n[attached image %s (%s, %d bytes) — also provided as vision input below]", a.Filename, a.ContentType, a.Size)
 		}
 	}
 	// first http URL in content: fetch text eagerly (tool remains for follow-ups).
@@ -351,7 +349,7 @@ func (b *Bot) enrichContent(ctx context.Context, m *discordgo.MessageCreate) str
 			log.Printf("[enrich] link prefetch failed %s: %v", u, err)
 		}
 	}
-	return content
+	return content, images
 }
 
 func firstURL(s string) string {
@@ -361,19 +359,6 @@ func firstURL(s string) string {
 		}
 	}
 	return ""
-}
-
-func downloadBytes(ctx context.Context, url string) ([]byte, string, error) {
-	ctx2, cancel := context.WithTimeout(ctx, 20*time.Second)
-	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx2, "GET", url, nil)
-	resp, err := (&http.Client{Timeout: 25 * time.Second}).Do(req)
-	if err != nil {
-		return nil, "", err
-	}
-	defer resp.Body.Close()
-	b, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-	return b, resp.Header.Get("Content-Type"), nil
 }
 
 func (b *Bot) sendSplit(channelID, text string) error {

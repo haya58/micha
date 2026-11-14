@@ -2,8 +2,10 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -56,5 +58,43 @@ func TestExtraHeadersSent(t *testing.T) {
 	}
 	if gotAuth != "Bearer key" {
 		t.Fatalf("Authorization not sent, got %q", gotAuth)
+	}
+}
+
+func TestVisionMarshal(t *testing.T) {
+	m := ChatMessage{Role: "user", Content: "see this", Images: []string{"https://cdn.example/i.png"}}
+	raw, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(raw)
+	if !strings.Contains(s, `"type":"image_url"`) || !strings.Contains(s, "https://cdn.example/i.png") {
+		t.Fatalf("image part missing: %s", s)
+	}
+	if !strings.Contains(s, `"text":"see this"`) && !strings.Contains(s, `"text": "see this"`) {
+		t.Fatalf("text part missing: %s", s)
+	}
+}
+
+func TestVisionUnmarshalRoundTrip(t *testing.T) {
+	in := `{"role":"user","content":[{"type":"text","text":"hi"},{"type":"image_url","image_url":{"url":"https://cdn.example/i.png"}}]}`
+	var m ChatMessage
+	if err := json.Unmarshal([]byte(in), &m); err != nil {
+		t.Fatal(err)
+	}
+	if m.Content != "hi" || len(m.Images) != 1 || m.Images[0] != "https://cdn.example/i.png" {
+		t.Fatalf("got %+v", m)
+	}
+}
+
+func TestPlainStringStillWorks(t *testing.T) {
+	m := ChatMessage{Role: "user", Content: "hello"}
+	raw, _ := json.Marshal(m)
+	if !strings.Contains(string(raw), `"content":"hello"`) {
+		t.Fatalf("plain content broken: %s", raw)
+	}
+	var back ChatMessage
+	if err := json.Unmarshal(raw, &back); err != nil || back.Content != "hello" {
+		t.Fatalf("round trip failed: %+v %v", back, err)
 	}
 }

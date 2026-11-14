@@ -28,7 +28,6 @@ type Config struct {
 	RandomProb         float64
 	RandomCooldownSec  int
 	RespondAll         bool
-	StatusDelaySec     int
 	HistoryLimit       int
 	MemoryTopK         int
 	ShellEnabled       bool
@@ -63,7 +62,6 @@ func Load() (*Config, error) {
 		HistoryLimit:      20,
 		MemoryTopK:        5,
 		RespondAll:        os.Getenv("RESPOND_ALL") == "true",
-		StatusDelaySec:    4,
 		ShellEnabled:      getenv("SHELL_ENABLED", "true") == "true",
 		ShellImage:        getenv("SHELL_IMAGE", "alpine:latest"),
 		ShellTimeoutSec:   30,
@@ -95,11 +93,6 @@ func Load() (*Config, error) {
 	if v := os.Getenv("SHELL_TIMEOUT"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			c.ShellTimeoutSec = n
-		}
-	}
-	if v := os.Getenv("STATUS_DELAY_SEC"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
-			c.StatusDelaySec = n
 		}
 	}
 	c.OpenAIExtraHeaders = ParseExtraHeaders(os.Getenv("OPENAI_EXTRA_HEADERS"))

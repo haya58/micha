@@ -31,6 +31,10 @@ type Status struct {
 	timer     *time.Timer
 }
 
+// statusDelay is the fixed threshold: the working embed appears only if
+// the reply is still running after this long.
+const statusDelay = 3 * time.Second
+
 // postStatusDelayed returns a Status that publishes its embed only if the
 // work outlasts delay. Call Done when the work finishes.
 func postStatusDelayed(s *discordgo.Session, channelID string, delay time.Duration, title, desc string) *Status {

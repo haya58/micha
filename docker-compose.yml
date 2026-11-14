@@ -19,7 +19,6 @@ services:
       BRAVE_API_KEY: ${BRAVE_API_KEY:-}
       PERSONA_PATH: ${PERSONA_PATH:-}
       RESPOND_ALL: ${RESPOND_ALL:-false}
-      STATUS_DELAY_SEC: ${STATUS_DELAY_SEC:-4}
       SHELL_ENABLED: "true"
       SHELL_IMAGE: ${SHELL_IMAGE:-alpine:latest}
     ports:

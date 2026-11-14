@@ -152,10 +152,10 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 	log.Printf("[reply] trigger guild=%s ch=%s thread=%s user=%s msg=%.80q",
 		m.GuildID, channelID, threadStr(threadID), m.Author.Username, m.Content)
 
-	// Show a working embed only if the reply takes longer than StatusDelaySec.
+	// Show a working embed only if the reply is slow (fixed 3s threshold).
 	// Fast replies never display it; slow phases update it via runTool.
 	st := postStatusDelayed(b.session, m.ChannelID,
-		time.Duration(b.cfg.StatusDelaySec)*time.Second, "考え中……", "回答を準備しています")
+		statusDelay, "考え中……", "回答を準備しています")
 
 	attachmentsJSON, _ := json.Marshal(m.Attachments)
 	stMsg := store.Message{

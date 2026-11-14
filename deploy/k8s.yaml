@@ -29,6 +29,9 @@ data:
   SHELL_IMAGE: "alpine:latest"
   # Mention-free mode: respond to every message in allowed channels.
   RESPOND_ALL: "false"
+  # Read-only channels (comma separated). The bot only polls them, never posts.
+  READONLY_CHANNEL_IDS: ""
+  READONLY_POLL_SEC: "300"
   # Login notice channel. Empty = first channel of allowed categories.
   LOGIN_NOTICE_CHANNEL_ID: ""
 ---

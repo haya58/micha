@@ -72,6 +72,16 @@ func TestNilStatusNoop(t *testing.T) {
 	st.Done()           // must not panic
 }
 
+func TestIsReadOnly(t *testing.T) {
+	b := &Bot{cfg: &config.Config{ReadonlyChannelIDs: []string{"ro1"}}}
+	if !b.isReadOnly("ro1") {
+		t.Fatal("ro1 should be read-only")
+	}
+	if b.isReadOnly("other") {
+		t.Fatal("other must not be read-only")
+	}
+}
+
 func TestLoginNoticeEmbed(t *testing.T) {
 	e := loginNoticeEmbed("ゆきな")
 	if e.Title != "ゆきながログインしました" {

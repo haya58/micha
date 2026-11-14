@@ -17,6 +17,10 @@ CREATE TABLE IF NOT EXISTS messages(
 CREATE INDEX IF NOT EXISTS idx_messages_scope ON messages(guild_id, channel_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(thread_id, created_at DESC) WHERE thread_id IS NOT NULL;
 
+-- Discord message ID for idempotent polling of read-only channels.
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS discord_id TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_messages_discord ON messages(guild_id, discord_id);
+
 CREATE TABLE IF NOT EXISTS memories(
   id BIGSERIAL PRIMARY KEY,
   guild_id TEXT NOT NULL,

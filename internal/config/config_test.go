@@ -106,3 +106,22 @@ func TestRespondAllOn(t *testing.T) {
 		t.Fatal("RESPOND_ALL=true should enable mention-free mode")
 	}
 }
+
+func TestReadonlyChannels(t *testing.T) {
+	setRequired(t)
+	if c, err := Load(); err != nil || len(c.ReadonlyChannelIDs) != 0 {
+		t.Fatalf("default should be empty: %+v %v", c, err)
+	}
+	setRequired(t)
+	t.Setenv("READONLY_CHANNEL_IDS", "ch1, ch2")
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(c.ReadonlyChannelIDs) != 2 || c.ReadonlyChannelIDs[0] != "ch1" {
+		t.Fatalf("got %v", c.ReadonlyChannelIDs)
+	}
+	if c.ReadonlyPollSec != 300 {
+		t.Fatalf("default poll interval should be 300, got %d", c.ReadonlyPollSec)
+	}
+}

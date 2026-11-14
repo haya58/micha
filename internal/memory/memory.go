@@ -12,8 +12,10 @@ import (
 
 // Context bundles history + relevant long-term memories for prompt building.
 type Context struct {
-	History  []store.Message
-	Memories []store.Memory
+	History       []store.Message
+	Memories      []store.Memory
+	Readonly      []store.Message
+	ReadonlyNames map[string]string // channelID -> display name
 }
 
 // Build gathers recent messages and (best-effort) vector memories.
@@ -42,6 +44,19 @@ func FormatPrompt(mc Context) string {
 		b.WriteString("Known facts about users/server:\n")
 		for _, m := range mc.Memories {
 			fmt.Fprintf(&b, "- [%s] %s\n", m.Kind, m.Summary)
+		}
+		// Each summary is prefixed with the user who stated it ("name: ...").
+		// Treat them as shared server knowledge both when recalling and replying.
+		b.WriteString("Each fact is prefixed with the user who stated it.\n\n")
+	}
+	if len(mc.Readonly) > 0 {
+		b.WriteString("Recent topics in read-only channels (for background only, do not reply there):\n")
+		for _, m := range mc.Readonly {
+			name := mc.ReadonlyNames[m.ChannelID]
+			if name == "" {
+				name = m.ChannelID
+			}
+			fmt.Fprintf(&b, "- [%s][%s]: %s\n", name, m.Username, textutil.Truncate(m.Content, 200))
 		}
 		b.WriteString("\n")
 	}

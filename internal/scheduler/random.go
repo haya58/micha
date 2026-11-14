@@ -1,6 +1,8 @@
 package scheduler
 
 import (
+	"context"
+	"log"
 	"math/rand"
 	"time"
 
@@ -32,6 +34,38 @@ func RandomTalk(cfg *config.Config, b *discord.Bot, stop <-chan struct{}) {
 			}
 			lastTalk[ch.ChannelID] = time.Now()
 			b.RandomSay(ch.ChannelID)
+		}
+	}
+}
+
+// PollReadonly periodically stores recent messages from read-only channels
+// so their topics surface in replies and random talk. Stops on channel close.
+func PollReadonly(cfg *config.Config, b *discord.Bot, stop <-chan struct{}) {
+	if len(cfg.ReadonlyChannelIDs) == 0 {
+		return
+	}
+	interval := time.Duration(cfg.ReadonlyPollSec) * time.Second
+	if interval <= 0 {
+		interval = 5 * time.Minute
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	poll := func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		for _, id := range cfg.ReadonlyChannelIDs {
+			if err := b.PollReadonlyChannel(ctx, id); err != nil {
+				log.Printf("[readonly] poll %s failed: %v", id, err)
+			}
+		}
+	}
+	poll() // initial fill at startup
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+			poll()
 		}
 	}
 }

@@ -54,14 +54,18 @@ type Message struct {
 	Username    string
 	Content     string
 	Attachments string
+	DiscordID   string
 }
 
 func (s *Store) SaveMessage(ctx context.Context, m Message) (int64, error) {
 	var id int64
+	// Upsert on Discord message ID so periodic polling stays idempotent.
 	err := s.Pool.QueryRow(ctx, `
-		INSERT INTO messages(guild_id, channel_id, thread_id, user_id, username, content, attachments)
-		VALUES($1,$2,$3,$4,$5,$6,COALESCE($7,'[]')::jsonb) RETURNING id`,
-		m.GuildID, m.ChannelID, m.ThreadID, m.UserID, m.Username, m.Content, m.Attachments).Scan(&id)
+		INSERT INTO messages(guild_id, channel_id, thread_id, user_id, username, content, attachments, discord_id)
+		VALUES($1,$2,$3,$4,$5,$6,COALESCE($7,'[]')::jsonb,NULLIF($8,''))
+		ON CONFLICT (guild_id, discord_id) DO UPDATE SET content=EXCLUDED.content
+		RETURNING id`,
+		m.GuildID, m.ChannelID, m.ThreadID, m.UserID, m.Username, m.Content, m.Attachments, m.DiscordID).Scan(&id)
 	return id, err
 }
 
@@ -110,6 +114,38 @@ func (s *Store) RecentByScope(ctx context.Context, guildID, channelID string, th
 		rows[i], rows[j] = rows[j], rows[i]
 	}
 	return rows, err
+}
+
+// RecentFromChannels returns the latest messages across the given channels,
+// oldest first. Used to surface read-only channel topics in replies.
+func (s *Store) RecentFromChannels(ctx context.Context, guildID string, channelIDs []string, limit int) ([]Message, error) {
+	if len(channelIDs) == 0 || limit <= 0 {
+		return nil, nil
+	}
+	r, err := s.Pool.Query(ctx, `
+		SELECT id, guild_id, channel_id, thread_id, user_id, username, content
+		FROM messages WHERE guild_id=$1 AND channel_id = ANY($2)
+		ORDER BY id DESC LIMIT $3`,
+		guildID, channelIDs, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	var rows []Message
+	for r.Next() {
+		var m Message
+		if e := r.Scan(&m.ID, &m.GuildID, &m.ChannelID, &m.ThreadID, &m.UserID, &m.Username, &m.Content); e != nil {
+			return nil, e
+		}
+		rows = append(rows, m)
+	}
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	for i, j := 0, len(rows)-1; i < j; i, j = i+1, j-1 {
+		rows[i], rows[j] = rows[j], rows[i]
+	}
+	return rows, nil
 }
 
 type Memory struct {

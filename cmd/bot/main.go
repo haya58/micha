@@ -61,6 +61,7 @@ func main() {
 	stop := make(chan struct{})
 	defer close(stop)
 	go scheduler.RandomTalk(cfg, b, stop)
+	go scheduler.PollReadonly(cfg, b, stop)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)

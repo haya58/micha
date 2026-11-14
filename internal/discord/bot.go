@@ -29,6 +29,8 @@ type Bot struct {
 	botID     string
 	botName   string
 	readyOnce sync.Once
+	chNamesMu sync.Mutex
+	chNames   map[string]string
 }
 
 func New(cfg *config.Config, st *store.Store, lc *llm.Client, persona string) (*Bot, error) {
@@ -37,7 +39,7 @@ func New(cfg *config.Config, st *store.Store, lc *llm.Client, persona string) (*
 		return nil, err
 	}
 	s.Identify.Intents = discordgo.IntentsGuilds | discordgo.IntentsGuildMessages | discordgo.IntentMessageContent
-	b := &Bot{cfg: cfg, session: s, store: st, llm: lc, persona: persona}
+	b := &Bot{cfg: cfg, session: s, store: st, llm: lc, persona: persona, chNames: map[string]string{}}
 	s.AddHandler(b.onMessage)
 	s.AddHandler(b.onReady)
 	return b, nil
@@ -75,9 +77,8 @@ func (b *Bot) announceLogin() {
 
 func loginNoticeEmbed(displayName string) *discordgo.MessageEmbed {
 	return &discordgo.MessageEmbed{
-		Title:       fmt.Sprintf("%sがログインしました", displayName),
-		Description: "メンションで話しかけてね",
-		Color:       0x57F287,
+		Title: fmt.Sprintf("%sがログインしました", displayName),
+		Color: 0x57F287,
 	}
 }
 
@@ -139,6 +140,74 @@ func (b *Bot) hasPermission(guildID, channelID string) bool {
 		perms&discordgo.PermissionReadMessageHistory != 0
 }
 
+// hasReadPermission checks view+history only (no send): for read-only polling.
+func (b *Bot) hasReadPermission(guildID, channelID string) bool {
+	perms, err := b.session.UserChannelPermissions(b.botID, channelID)
+	if err != nil {
+		return false
+	}
+	return perms&discordgo.PermissionViewChannel != 0 &&
+		perms&discordgo.PermissionReadMessageHistory != 0
+}
+
+// isReadOnly reports whether a channel is read-only for the bot.
+// The bot never replies in or posts to these channels.
+func (b *Bot) isReadOnly(channelID string) bool {
+	for _, id := range b.cfg.ReadonlyChannelIDs {
+		if id == channelID {
+			return true
+		}
+	}
+	return false
+}
+
+// channelName resolves a channel ID to "#name", cached per process.
+func (b *Bot) channelName(channelID string) string {
+	b.chNamesMu.Lock()
+	defer b.chNamesMu.Unlock()
+	if n, ok := b.chNames[channelID]; ok {
+		return n
+	}
+	name := channelID
+	if ch, err := b.session.Channel(channelID); err == nil && ch.Name != "" {
+		name = "#" + ch.Name
+	}
+	b.chNames[channelID] = name
+	return name
+}
+
+// PollReadonlyChannel fetches recent messages from a read-only channel and
+// stores them (upsert by Discord message ID, so reruns are idempotent).
+func (b *Bot) PollReadonlyChannel(ctx context.Context, channelID string) error {
+	if !b.hasReadPermission(b.cfg.GuildID, channelID) {
+		return fmt.Errorf("no read permission for %s", channelID)
+	}
+	msgs, err := b.session.ChannelMessages(channelID, 20, "", "", "")
+	if err != nil {
+		return err
+	}
+	// API returns newest first; store oldest first for chronological IDs.
+	for i, j := 0, len(msgs)-1; i < j; i, j = i+1, j-1 {
+		msgs[i], msgs[j] = msgs[j], msgs[i]
+	}
+	for _, dm := range msgs {
+		if dm.Author == nil {
+			continue
+		}
+		attachmentsJSON, _ := json.Marshal(dm.Attachments)
+		_, err := b.store.SaveMessage(ctx, store.Message{
+			GuildID: b.cfg.GuildID, ChannelID: channelID,
+			UserID: dm.Author.ID, Username: dm.Author.Username,
+			Content: dm.Content, Attachments: string(attachmentsJSON), DiscordID: dm.ID,
+		})
+		if err != nil {
+			return err
+		}
+	}
+	log.Printf("[readonly] polled %s: %d messages", channelID, len(msgs))
+	return nil
+}
+
 func isMentionOf(botID, content string, mentions []*discordgo.User) bool {
 	if strings.Contains(content, "<@"+botID+">") || strings.Contains(content, "<@!"+botID+">") {
 		return true
@@ -165,6 +234,9 @@ func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	channelID, threadID, ok := b.scope(m)
 	if !ok {
 		return
+	}
+	if b.isReadOnly(m.ChannelID) {
+		return // read-only: polling stores it, never reply here
 	}
 	if !b.hasPermission(m.GuildID, m.ChannelID) {
 		return
@@ -202,7 +274,7 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 	stMsg := store.Message{
 		GuildID: m.GuildID, ChannelID: channelID, ThreadID: threadID,
 		UserID: m.Author.ID, Username: m.Author.Username,
-		Content: m.Content, Attachments: string(attachmentsJSON),
+		Content: m.Content, Attachments: string(attachmentsJSON), DiscordID: m.ID,
 	}
 	msgID, err := b.store.SaveMessage(ctx, stMsg)
 	if err != nil {
@@ -216,6 +288,19 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 	}
 
 	mctx := memory.Build(ctx, b.store, b.llm, m.GuildID, channelID, threadID, b.cfg.HistoryLimit, b.cfg.MemoryTopK, m.Content)
+
+	// Background from read-only channels (periodic polling stores them).
+	if ids := b.cfg.ReadonlyChannelIDs; len(ids) > 0 {
+		if ro, err := b.store.RecentFromChannels(ctx, m.GuildID, ids, 10); err != nil {
+			log.Printf("[reply] readonly context failed: %v", err)
+		} else if len(ro) > 0 {
+			mctx.Readonly = ro
+			mctx.ReadonlyNames = map[string]string{}
+			for _, rm := range ro {
+				mctx.ReadonlyNames[rm.ChannelID] = b.channelName(rm.ChannelID)
+			}
+		}
+	}
 
 	system := b.persona + "\n\nServer time: " + time.Now().Format(time.RFC3339) + "\n" + memory.FormatPrompt(mctx)
 	var msgs []llm.ChatMessage
@@ -512,6 +597,9 @@ func firstURL(s string) string {
 }
 
 func (b *Bot) sendSplit(channelID, text string) error {
+	if b.isReadOnly(channelID) {
+		return fmt.Errorf("refusing to post in read-only channel %s", channelID)
+	}
 	if text == "" {
 		text = "(empty reply)"
 	}
@@ -541,6 +629,7 @@ type ChannelSnapshot struct {
 }
 
 // ActiveChannels lists text channels under allowed categories for random talk.
+// Read-only channels are excluded: the bot never posts there.
 func (b *Bot) ActiveChannels() ([]ChannelSnapshot, error) {
 	allowed := map[string]bool{}
 	for _, c := range b.cfg.CategoryIDs {
@@ -552,7 +641,7 @@ func (b *Bot) ActiveChannels() ([]ChannelSnapshot, error) {
 	}
 	var out []ChannelSnapshot
 	for _, ch := range chs {
-		if ch.Type == discordgo.ChannelTypeGuildText && allowed[ch.ParentID] {
+		if ch.Type == discordgo.ChannelTypeGuildText && allowed[ch.ParentID] && !b.isReadOnly(ch.ID) {
 			out = append(out, ChannelSnapshot{ChannelID: ch.ID, GuildID: b.cfg.GuildID, LastMsgID: ch.LastMessageID})
 		}
 	}

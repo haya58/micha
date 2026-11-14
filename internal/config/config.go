@@ -29,6 +29,8 @@ type Config struct {
 	RandomCooldownSec    int
 	RespondAll           bool
 	LoginNoticeChannelID string
+	ReadonlyChannelIDs   []string
+	ReadonlyPollSec      int
 	HistoryLimit         int
 	MemoryTopK           int
 	ShellEnabled         bool
@@ -64,6 +66,7 @@ func Load() (*Config, error) {
 		MemoryTopK:           5,
 		RespondAll:           os.Getenv("RESPOND_ALL") == "true",
 		LoginNoticeChannelID: os.Getenv("LOGIN_NOTICE_CHANNEL_ID"),
+		ReadonlyPollSec:      300,
 		ShellEnabled:         getenv("SHELL_ENABLED", "true") == "true",
 		ShellImage:           getenv("SHELL_IMAGE", "alpine:latest"),
 		ShellTimeoutSec:      30,
@@ -75,6 +78,19 @@ func Load() (*Config, error) {
 			if s != "" {
 				c.CategoryIDs = append(c.CategoryIDs, s)
 			}
+		}
+	}
+	if v := os.Getenv("READONLY_CHANNEL_IDS"); v != "" {
+		for _, s := range strings.Split(v, ",") {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				c.ReadonlyChannelIDs = append(c.ReadonlyChannelIDs, s)
+			}
+		}
+	}
+	if v := os.Getenv("READONLY_POLL_SEC"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 60 {
+			c.ReadonlyPollSec = n
 		}
 	}
 	if v := os.Getenv("RANDOM_TALK_PROBABILITY"); v != "" {

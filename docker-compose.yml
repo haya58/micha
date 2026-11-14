@@ -21,6 +21,8 @@ services:
       RESPOND_ALL: ${RESPOND_ALL:-false}
       SHELL_ENABLED: "true"
       SHELL_IMAGE: ${SHELL_IMAGE:-alpine:latest}
+      # Talk to the dind sidecar over plaintext TCP (TLS disabled there).
+      DOCKER_HOST: tcp://dind:2375
     ports:
       - "8085:8080"
     depends_on:

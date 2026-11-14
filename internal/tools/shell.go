@@ -48,5 +48,5 @@ func ExecShell(ctx context.Context, image, command string, timeoutSec int) (stri
 		return out, nil
 	}
 	// No docker: strict fallback — allow only harmless read-only commands locally.
-	return "", fmt.Errorf("docker not found; shell execution requires docker (no-network disposable container)")
+	return "", fmt.Errorf("docker CLI not found (need docker-cli + DOCKER_HOST pointing at the dind sidecar)")
 }

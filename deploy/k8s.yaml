@@ -67,6 +67,8 @@ spec:
           env:
             - name: PERSONA_PATH
               value: /persona/persona.md
+            - name: DOCKER_HOST
+              value: tcp://localhost:2375
           volumeMounts:
             - name: persona
               mountPath: /persona

@@ -23,18 +23,18 @@ func main() {
 		log.Fatalf("config: %v", err)
 	}
 	ctx := context.Background()
-	st, err := store.Connect(ctx, cfg.DatabaseURL, cfg.EmbeddingDim)
+	st, err := store.Connect(ctx, cfg.Database.URL, cfg.OpenAI.EmbeddingDim)
 	if err != nil {
 		log.Fatalf("db: %v", err)
 	}
 	defer st.Close()
 	log.Printf("db connected and migrated (messages, memories, tool_runs)")
 
-	personaText, err := persona.Load(cfg.PersonaPath)
+	personaText, err := persona.Load(cfg.Persona.Path)
 	if err != nil {
 		log.Fatalf("persona: %v", err)
 	}
-	lc := llm.New(cfg.OpenAIBaseURL, cfg.OpenAIAPIKey, cfg.OpenAIModel, cfg.EmbeddingModel, cfg.OpenAIExtraHeaders)
+	lc := llm.New(cfg.OpenAI.BaseURL, cfg.OpenAI.APIKey, cfg.OpenAI.Model, cfg.OpenAI.EmbeddingModel, cfg.OpenAI.ExtraHeaders)
 
 	b, err := dbot.New(cfg, st, lc, personaText)
 	if err != nil {
@@ -44,7 +44,7 @@ func main() {
 		log.Fatalf("discord open: %v", err)
 	}
 	defer b.Close()
-	log.Printf("bot started guild=%s categories=%v model=%s", cfg.GuildID, cfg.CategoryIDs, cfg.OpenAIModel)
+	log.Printf("bot started guild=%s categories=%v model=%s", cfg.Discord.GuildID, cfg.Discord.CategoryIDs, cfg.OpenAI.Model)
 
 	// health endpoint for k8s/docker
 	mux := http.NewServeMux()
@@ -56,7 +56,7 @@ func main() {
 		}
 		_, _ = w.Write([]byte("ok"))
 	})
-	go func() { _ = http.ListenAndServe(cfg.HealthAddr, mux) }()
+	go func() { _ = http.ListenAndServe(cfg.Server.HealthAddr, mux) }()
 
 	stop := make(chan struct{})
 	defer close(stop)

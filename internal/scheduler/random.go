@@ -21,7 +21,7 @@ func RandomTalk(cfg *config.Config, b *discord.Bot, stop <-chan struct{}) {
 		case <-stop:
 			return
 		case <-ticker.C:
-			if r.Float64() > cfg.RandomProb*15 { // 5-min tick scaled
+			if r.Float64() > cfg.RandomTalk.Probability*15 { // 5-min tick scaled
 				continue
 			}
 			chs, err := b.ActiveChannels()
@@ -29,7 +29,7 @@ func RandomTalk(cfg *config.Config, b *discord.Bot, stop <-chan struct{}) {
 				continue
 			}
 			ch := chs[r.Intn(len(chs))]
-			if time.Since(lastTalk[ch.ChannelID]) < time.Duration(cfg.RandomCooldownSec)*time.Second {
+			if time.Since(lastTalk[ch.ChannelID]) < time.Duration(cfg.RandomTalk.CooldownSec)*time.Second {
 				continue
 			}
 			lastTalk[ch.ChannelID] = time.Now()
@@ -41,10 +41,10 @@ func RandomTalk(cfg *config.Config, b *discord.Bot, stop <-chan struct{}) {
 // PollReadonly periodically stores recent messages from read-only channels
 // so their topics surface in replies and random talk. Stops on channel close.
 func PollReadonly(cfg *config.Config, b *discord.Bot, stop <-chan struct{}) {
-	if len(cfg.ReadonlyChannelIDs) == 0 {
+	if len(cfg.Discord.ReadonlyChannelIDs) == 0 {
 		return
 	}
-	interval := time.Duration(cfg.ReadonlyPollSec) * time.Second
+	interval := time.Duration(cfg.Discord.ReadonlyPollSec) * time.Second
 	if interval <= 0 {
 		interval = 5 * time.Minute
 	}
@@ -53,7 +53,7 @@ func PollReadonly(cfg *config.Config, b *discord.Bot, stop <-chan struct{}) {
 	poll := func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
-		for _, id := range cfg.ReadonlyChannelIDs {
+		for _, id := range cfg.Discord.ReadonlyChannelIDs {
 			if err := b.PollReadonlyChannel(ctx, id); err != nil {
 				log.Printf("[readonly] poll %s failed: %v", id, err)
 			}

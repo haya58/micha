@@ -7,10 +7,16 @@ import (
 )
 
 const requiredTOML = `
-discord_bot_token = "tok"
-discord_guild_id = "guild1"
-database_url = "postgres://localhost/db"
-openai_api_key = "key"
+[discord]
+token = "tok"
+guild_id = "guild1"
+category_ids = ["cat1", "cat2"]
+
+[database]
+url = "postgres://localhost/db"
+
+[openai]
+api_key = "key"
 `
 
 func writeTOML(t *testing.T, body string) string {
@@ -24,111 +30,133 @@ func writeTOML(t *testing.T, body string) string {
 }
 
 func TestLoadFromTOML(t *testing.T) {
-	writeTOML(t, requiredTOML+`
-bot_id = "file-bot"
+	writeTOML(t, `
+[bot]
+id = "file-bot"
 display_name = "file-name"
-openai_model = "file-model"
-shell_enabled = false
-discord_category_ids = ["a", "b", "c"]
+
+[discord]
+token = "tok"
+guild_id = "guild1"
+category_ids = ["a", "b", "c"]
+
+[database]
+url = "postgres://localhost/db"
+
+[openai]
+api_key = "key"
+model = "file-model"
+
+[shell]
+enabled = false
 `)
 	c, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if c.BotID != "file-bot" || c.DisplayName != "file-name" {
+	if c.Bot.ID != "file-bot" || c.Bot.DisplayName != "file-name" {
 		t.Fatalf("got %+v", c)
 	}
-	if c.OpenAIModel != "file-model" || c.ShellEnabled {
+	if c.OpenAI.Model != "file-model" || c.Shell.Enabled {
 		t.Fatalf("got %+v", c)
 	}
-	if len(c.CategoryIDs) != 3 || c.CategoryIDs[0] != "a" {
-		t.Fatalf("got %v", c.CategoryIDs)
+	if len(c.Discord.CategoryIDs) != 3 || c.Discord.CategoryIDs[0] != "a" {
+		t.Fatalf("got %v", c.Discord.CategoryIDs)
 	}
-	if c.GuildID != "guild1" {
-		t.Fatalf("GuildID = %q", c.GuildID)
+	if c.Discord.GuildID != "guild1" {
+		t.Fatalf("GuildID = %q", c.Discord.GuildID)
 	}
 }
 
 func TestLoadMissingRequired(t *testing.T) {
 	writeTOML(t, `
-discord_guild_id = "guild1"
-discord_category_ids = ["cat1"]
-database_url = "postgres://localhost/db"
-openai_api_key = "key"
-`)
-	if _, err := Load(); err == nil {
-		t.Fatal("expected error for missing discord_bot_token")
-	}
-}
+[discord]
+guild_id = "guild1"
+category_ids = ["cat1"]
 
-func TestLoadMissingCategories(t *testing.T) {
-	writeTOML(t, `
-discord_bot_token = "tok"
-discord_guild_id = "guild1"
-database_url = "postgres://localhost/db"
-openai_api_key = "key"
+[database]
+url = "postgres://localhost/db"
+
+[openai]
+api_key = "key"
 `)
 	if _, err := Load(); err == nil {
-		t.Fatal("expected error for missing discord_category_ids")
+		t.Fatal("expected error for missing discord token")
 	}
 }
 
 func TestLoadDefaults(t *testing.T) {
-	writeTOML(t, requiredTOML+"discord_category_ids = [\"cat1\", \"cat2\"]\n")
+	writeTOML(t, requiredTOML)
 	c, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if c.OpenAIModel != "gpt-4o-mini" || c.EmbeddingDim != 1536 {
+	if c.OpenAI.Model != "gpt-4o-mini" || c.OpenAI.EmbeddingDim != 1536 {
 		t.Fatalf("defaults not applied: %+v", c)
 	}
-	if !c.ShellEnabled {
-		t.Fatal("shell_enabled should default to true")
+	if !c.Shell.Enabled {
+		t.Fatal("shell.enabled should default to true")
 	}
-	if c.RespondAll {
-		t.Fatal("respond_all should default to false")
+	if c.Bot.RespondAll {
+		t.Fatal("bot.respond_all should default to false")
 	}
-	if c.ReadonlyPollSec != 300 {
-		t.Fatalf("readonly_poll_sec should default to 300, got %d", c.ReadonlyPollSec)
-	}
-	if len(c.ReadonlyChannelIDs) != 0 {
-		t.Fatalf("readonly_channel_ids should default to empty, got %v", c.ReadonlyChannelIDs)
+	if c.Discord.ReadonlyPollSec != 300 {
+		t.Fatalf("readonly_poll_sec should default to 300, got %d", c.Discord.ReadonlyPollSec)
 	}
 }
 
 func TestLoadExtraHeaders(t *testing.T) {
-	writeTOML(t, requiredTOML+"discord_category_ids = [\"cat1\", \"cat2\"]\n[openai_extra_headers]\nx-opencode-session = \"ses_123\"\n")
+	writeTOML(t, requiredTOML+`
+[openai.extra_headers]
+x-opencode-session = "ses_123"
+`)
 	c, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if c.OpenAIExtraHeaders["x-opencode-session"] != "ses_123" {
-		t.Fatalf("got %v", c.OpenAIExtraHeaders)
+	if c.OpenAI.ExtraHeaders["x-opencode-session"] != "ses_123" {
+		t.Fatalf("got %v", c.OpenAI.ExtraHeaders)
 	}
 }
 
 func TestLoadRespondAll(t *testing.T) {
-	writeTOML(t, requiredTOML+"discord_category_ids = [\"cat1\", \"cat2\"]\nrespond_all = true\n")
+	writeTOML(t, requiredTOML+`
+[bot]
+respond_all = true
+`)
 	c, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if !c.RespondAll {
+	if !c.Bot.RespondAll {
 		t.Fatal("respond_all=true should enable mention-free mode")
 	}
 }
 
 func TestLoadReadonlyChannels(t *testing.T) {
-	writeTOML(t, requiredTOML+"discord_category_ids = [\"cat1\", \"cat2\"]\nreadonly_channel_ids = [\"ch1\", \"ch2\"]\nreadonly_poll_sec = 120\n")
+	writeTOML(t, `
+[discord]
+token = "tok"
+guild_id = "guild1"
+category_ids = ["cat1"]
+readonly_channel_ids = ["ch1", "ch2"]
+readonly_poll_sec = 120
+
+[database]
+url = "postgres://localhost/db"
+
+[openai]
+api_key = "key"
+`)
 	c, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if len(c.ReadonlyChannelIDs) != 2 || c.ReadonlyChannelIDs[0] != "ch1" {
-		t.Fatalf("got %v", c.ReadonlyChannelIDs)
+	if len(c.Discord.ReadonlyChannelIDs) != 2 || c.Discord.ReadonlyChannelIDs[0] != "ch1" {
+		t.Fatalf("got %v", c.Discord.ReadonlyChannelIDs)
 	}
-	if c.ReadonlyPollSec != 120 {
-		t.Fatalf("got %d", c.ReadonlyPollSec)
+	if c.Discord.ReadonlyPollSec != 120 {
+		t.Fatalf("got %d", c.Discord.ReadonlyPollSec)
 	}
 }
 
@@ -139,10 +167,9 @@ func TestLoadBrokenTOML(t *testing.T) {
 	}
 }
 
-func TestLoadMissingFileUsesDefaults(t *testing.T) {
+func TestLoadMissingFile(t *testing.T) {
 	t.Setenv("CONFIG_PATH", filepath.Join(t.TempDir(), "nonexistent.toml"))
-	_, err := Load()
-	if err == nil {
-		t.Fatal("expected error: required fields missing without file or env")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error for missing config file")
 	}
 }

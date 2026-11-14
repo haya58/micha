@@ -9,6 +9,13 @@ import (
 	"dis-llm-bot/internal/config"
 )
 
+func newTestConfig(categories []string) *config.Config {
+	c := &config.Config{}
+	c.Bot.DisplayName = "my-bot"
+	c.Discord.CategoryIDs = categories
+	return c
+}
+
 func TestIsMentionOfDirect(t *testing.T) {
 	if !isMentionOf("123", "hey <@123> hello", nil) {
 		t.Fatal("should detect <@id> mention")
@@ -32,7 +39,7 @@ func TestIsMentionOfViaList(t *testing.T) {
 }
 
 func TestAllowedCategory(t *testing.T) {
-	b := &Bot{cfg: &config.Config{CategoryIDs: []string{"cat1", "cat2"}}}
+	b := &Bot{cfg: newTestConfig([]string{"cat1", "cat2"})}
 	if !b.allowedCategory("cat1") || !b.allowedCategory("cat2") {
 		t.Fatal("allowed categories not matched")
 	}
@@ -73,7 +80,8 @@ func TestNilStatusNoop(t *testing.T) {
 }
 
 func TestIsReadOnly(t *testing.T) {
-	b := &Bot{cfg: &config.Config{ReadonlyChannelIDs: []string{"ro1"}}}
+	b := &Bot{cfg: newTestConfig(nil)}
+	b.cfg.Discord.ReadonlyChannelIDs = []string{"ro1"}
 	if !b.isReadOnly("ro1") {
 		t.Fatal("ro1 should be read-only")
 	}
@@ -121,7 +129,7 @@ func TestDelayedStatusStaysSilentWhenFast(t *testing.T) {
 
 func TestStripSelfPrefix(t *testing.T) {
 	b := &Bot{
-		cfg:     &config.Config{DisplayName: "my-bot"},
+		cfg:     newTestConfig(nil),
 		botID:   "123",
 		botName: "dis-llm-bot",
 	}

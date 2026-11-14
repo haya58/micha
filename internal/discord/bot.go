@@ -34,7 +34,7 @@ type Bot struct {
 }
 
 func New(cfg *config.Config, st *store.Store, lc *llm.Client, persona string) (*Bot, error) {
-	s, err := discordgo.New("Bot " + cfg.DiscordToken)
+	s, err := discordgo.New("Bot " + cfg.Discord.Token)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +57,7 @@ func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
 
 // announceLogin posts a "logged in" embed. Best-effort: failures are logged.
 func (b *Bot) announceLogin() {
-	channelID := b.cfg.LoginNoticeChannelID
+	channelID := b.cfg.Discord.LoginNoticeChannelID
 	if channelID == "" {
 		chs, err := b.ActiveChannels()
 		if err != nil || len(chs) == 0 {
@@ -66,11 +66,11 @@ func (b *Bot) announceLogin() {
 		}
 		channelID = chs[0].ChannelID
 	}
-	if !b.hasPermission(b.cfg.GuildID, channelID) {
+	if !b.hasPermission(b.cfg.Discord.GuildID, channelID) {
 		log.Printf("[ready] no permission to post login notice in %s", channelID)
 		return
 	}
-	if _, err := b.session.ChannelMessageSendEmbed(channelID, loginNoticeEmbed(b.cfg.DisplayName)); err != nil {
+	if _, err := b.session.ChannelMessageSendEmbed(channelID, loginNoticeEmbed(b.cfg.Bot.DisplayName)); err != nil {
 		log.Printf("[ready] login notice failed: %v", err)
 	}
 }
@@ -93,7 +93,7 @@ func errorReplyEmbed() *discordgo.MessageEmbed {
 
 // scope resolves channel/thread and whether the message is in an allowed category.
 func (b *Bot) scope(m *discordgo.MessageCreate) (channelID string, threadID *string, ok bool) {
-	if m.GuildID == "" || m.GuildID != b.cfg.GuildID {
+	if m.GuildID == "" || m.GuildID != b.cfg.Discord.GuildID {
 		return "", nil, false
 	}
 	ch, err := b.session.Channel(m.ChannelID)
@@ -122,7 +122,7 @@ func (b *Bot) scope(m *discordgo.MessageCreate) (channelID string, threadID *str
 }
 
 func (b *Bot) allowedCategory(parentID string) bool {
-	for _, c := range b.cfg.CategoryIDs {
+	for _, c := range b.cfg.Discord.CategoryIDs {
 		if c == parentID {
 			return true
 		}
@@ -153,7 +153,7 @@ func (b *Bot) hasReadPermission(guildID, channelID string) bool {
 // isReadOnly reports whether a channel is read-only for the bot.
 // The bot never replies in or posts to these channels.
 func (b *Bot) isReadOnly(channelID string) bool {
-	for _, id := range b.cfg.ReadonlyChannelIDs {
+	for _, id := range b.cfg.Discord.ReadonlyChannelIDs {
 		if id == channelID {
 			return true
 		}
@@ -179,7 +179,7 @@ func (b *Bot) channelName(channelID string) string {
 // PollReadonlyChannel fetches recent messages from a read-only channel and
 // stores them (upsert by Discord message ID, so reruns are idempotent).
 func (b *Bot) PollReadonlyChannel(ctx context.Context, channelID string) error {
-	if !b.hasReadPermission(b.cfg.GuildID, channelID) {
+	if !b.hasReadPermission(b.cfg.Discord.GuildID, channelID) {
 		return fmt.Errorf("no read permission for %s", channelID)
 	}
 	msgs, err := b.session.ChannelMessages(channelID, 20, "", "", "")
@@ -196,7 +196,7 @@ func (b *Bot) PollReadonlyChannel(ctx context.Context, channelID string) error {
 		}
 		attachmentsJSON, _ := json.Marshal(dm.Attachments)
 		_, err := b.store.SaveMessage(ctx, store.Message{
-			GuildID: b.cfg.GuildID, ChannelID: channelID,
+			GuildID: b.cfg.Discord.GuildID, ChannelID: channelID,
 			UserID: dm.Author.ID, Username: dm.Author.Username,
 			Content: dm.Content, Attachments: string(attachmentsJSON), DiscordID: dm.ID,
 		})
@@ -243,7 +243,7 @@ func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 	mentioned := isMentionOf(b.botID, m.Content, m.Mentions)
 	isReply := m.ReferencedMessage != nil && m.ReferencedMessage.Author != nil && m.ReferencedMessage.Author.ID == b.botID
-	if !mentioned && !isReply && !b.cfg.RespondAll {
+	if !mentioned && !isReply && !b.cfg.Bot.RespondAll {
 		return // non-trigger messages are handled by the random scheduler
 	}
 	b.handleReply(m, channelID, threadID)
@@ -287,10 +287,10 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 		log.Printf("[reply] attaching %d image(s) as vision input msgID=%d", len(images), msgID)
 	}
 
-	mctx := memory.Build(ctx, b.store, b.llm, m.GuildID, channelID, threadID, b.cfg.HistoryLimit, b.cfg.MemoryTopK, m.Content)
+	mctx := memory.Build(ctx, b.store, b.llm, m.GuildID, channelID, threadID, b.cfg.Memory.HistoryLimit, b.cfg.Memory.TopK, m.Content)
 
 	// Background from read-only channels (periodic polling stores them).
-	if ids := b.cfg.ReadonlyChannelIDs; len(ids) > 0 {
+	if ids := b.cfg.Discord.ReadonlyChannelIDs; len(ids) > 0 {
 		if ro, err := b.store.RecentFromChannels(ctx, m.GuildID, ids, 10); err != nil {
 			log.Printf("[reply] readonly context failed: %v", err)
 		} else if len(ro) > 0 {
@@ -344,7 +344,7 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 
 	if _, err := b.store.SaveMessage(ctx, store.Message{
 		GuildID: m.GuildID, ChannelID: channelID, ThreadID: threadID,
-		UserID: b.botID, Username: b.cfg.DisplayName, Content: reply,
+		UserID: b.botID, Username: b.cfg.Bot.DisplayName, Content: reply,
 		Attachments: "[]",
 	}); err != nil {
 		log.Printf("[reply] SaveMessage(assistant) failed: %v", err)
@@ -381,7 +381,7 @@ func (b *Bot) notifyRemembered(channelID, username, summary string) {
 // stripSelfPrefix removes a leading "bot-name:" / mention prefix that the
 // model sometimes echoes from the "Username: content" history format.
 func (b *Bot) stripSelfPrefix(reply string) string {
-	names := []string{b.botName, b.cfg.DisplayName, "dis-llm-bot", "dls-llm-bot"}
+	names := []string{b.botName, b.cfg.Bot.DisplayName, "dis-llm-bot", "dls-llm-bot"}
 	var mentions []string
 	if b.botID != "" {
 		mentions = []string{"<@" + b.botID + ">", "<@!" + b.botID + ">"}
@@ -421,7 +421,7 @@ type toolEnv struct {
 }
 
 func (b *Bot) chatWithTools(ctx context.Context, msgs []llm.ChatMessage, msgID int64, st *Status, env toolEnv) (string, error) {
-	toolDefs := llm.DefaultTools(b.cfg.ShellEnabled)
+	toolDefs := llm.DefaultTools(b.cfg.Shell.Enabled)
 	cur := append([]llm.ChatMessage{}, msgs...)
 	for step := 0; step < 3; step++ {
 		out, err := b.llm.Chat(ctx, cur, toolDefs)
@@ -480,7 +480,7 @@ func (b *Bot) runTool(ctx context.Context, tc llm.ToolCall, msgID int64, st *Sta
 		if f, ok := args["count"].(float64); ok {
 			n = int(f)
 		}
-		r, err := tools.BraveSearch(tctx, b.cfg.BraveAPIKey, q, n)
+		r, err := tools.BraveSearch(tctx, b.cfg.Brave.APIKey, q, n)
 		if err != nil {
 			result = "search error: " + err.Error()
 		} else {
@@ -495,16 +495,16 @@ func (b *Bot) runTool(ctx context.Context, tc llm.ToolCall, msgID int64, st *Sta
 			result = r
 		}
 	case "exec_shell":
-		if !b.cfg.ShellEnabled {
+		if !b.cfg.Shell.Enabled {
 			result = "shell is disabled"
 			break
 		}
 		cmdStr, _ := args["command"].(string)
-		to := b.cfg.ShellTimeoutSec
+		to := b.cfg.Shell.TimeoutSec
 		if f, ok := args["timeout"].(float64); ok && f > 0 {
 			to = int(f)
 		}
-		r, err := tools.ExecShell(tctx, b.cfg.ShellImage, cmdStr, to)
+		r, err := tools.ExecShell(tctx, b.cfg.Shell.Image, cmdStr, to)
 		if err != nil {
 			result = "shell error: " + err.Error()
 		} else {
@@ -640,17 +640,17 @@ type ChannelSnapshot struct {
 // Read-only channels are excluded: the bot never posts there.
 func (b *Bot) ActiveChannels() ([]ChannelSnapshot, error) {
 	allowed := map[string]bool{}
-	for _, c := range b.cfg.CategoryIDs {
+	for _, c := range b.cfg.Discord.CategoryIDs {
 		allowed[c] = true
 	}
-	chs, err := b.session.GuildChannels(b.cfg.GuildID)
+	chs, err := b.session.GuildChannels(b.cfg.Discord.GuildID)
 	if err != nil {
 		return nil, err
 	}
 	var out []ChannelSnapshot
 	for _, ch := range chs {
 		if ch.Type == discordgo.ChannelTypeGuildText && allowed[ch.ParentID] && !b.isReadOnly(ch.ID) {
-			out = append(out, ChannelSnapshot{ChannelID: ch.ID, GuildID: b.cfg.GuildID, LastMsgID: ch.LastMessageID})
+			out = append(out, ChannelSnapshot{ChannelID: ch.ID, GuildID: b.cfg.Discord.GuildID, LastMsgID: ch.LastMessageID})
 		}
 	}
 	return out, nil
@@ -659,7 +659,7 @@ func (b *Bot) ActiveChannels() ([]ChannelSnapshot, error) {
 func (b *Bot) RandomSay(channelID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	hist, _ := b.store.RecentByScope(ctx, b.cfg.GuildID, channelID, nil, 8)
+	hist, _ := b.store.RecentByScope(ctx, b.cfg.Discord.GuildID, channelID, nil, 8)
 	var msgs []llm.ChatMessage
 	msgs = append(msgs, llm.ChatMessage{Role: "system", Content: b.persona + "\nYou may start a light casual conversation. Keep it short. If nothing interesting comes to mind, reply with exactly: SKIP"})
 	for _, h := range hist {
@@ -675,12 +675,12 @@ func (b *Bot) RandomSay(channelID string) {
 		return
 	}
 	reply := b.stripSelfPrefix(out.Content)
-	if !b.hasPermission(b.cfg.GuildID, channelID) {
+	if !b.hasPermission(b.cfg.Discord.GuildID, channelID) {
 		return
 	}
 	_ = b.sendSplit(channelID, reply)
 	_, _ = b.store.SaveMessage(ctx, store.Message{
-		GuildID: b.cfg.GuildID, ChannelID: channelID,
-		UserID: b.botID, Username: b.cfg.DisplayName, Content: reply, Attachments: "[]",
+		GuildID: b.cfg.Discord.GuildID, ChannelID: channelID,
+		UserID: b.botID, Username: b.cfg.Bot.DisplayName, Content: reply, Attachments: "[]",
 	})
 }

@@ -297,13 +297,13 @@ func (b *Bot) handleReply(m *discordgo.MessageCreate, channelID string, threadID
 	}
 
 	mctx := memory.Build(ctx, b.store, b.llm, m.GuildID, channelID, threadID, b.cfg.Memory.HistoryLimit, b.cfg.Memory.TopK, m.Content)
-
 	// Background from read-only channels (periodic polling stores them).
 	// Per-channel quotas keep one busy channel from crowding out the rest.
 	if ro, names := b.readonlyContext(ctx, m.GuildID); len(ro) > 0 {
 		mctx.Readonly = ro
 		mctx.ReadonlyNames = names
 	}
+	log.Printf("[reply] context msgID=%d hist=%d mem=%d readonly=%d", msgID, len(mctx.History), len(mctx.Memories), len(mctx.Readonly))
 
 	system := b.persona + "\n\nServer time: " + time.Now().Format(time.RFC3339) + "\n" + memory.FormatPrompt(mctx)
 	var msgs []llm.ChatMessage
@@ -708,8 +708,9 @@ func (b *Bot) RandomSay(channelID string) {
 		mctx.Readonly = ro
 		mctx.ReadonlyNames = names
 	}
+	log.Printf("[random] context ch=%s hist=%d mem=%d readonly=%d", channelID, len(mctx.History), len(mctx.Memories), len(mctx.Readonly))
 	var msgs []llm.ChatMessage
-	msgs = append(msgs, llm.ChatMessage{Role: "system", Content: b.persona + "\nYou may start a light casual conversation. Keep it short. You may pick up topics from other channels or memories shown above. If nothing interesting comes to mind, reply with exactly: SKIP\n" + memory.FormatPrompt(mctx)})
+	msgs = append(msgs, llm.ChatMessage{Role: "system", Content: b.persona + "\nReply with exactly: SKIP if there is nothing worth saying.\n" + memory.FormatPrompt(mctx)})
 	for _, h := range mctx.History {
 		role := "user"
 		if h.UserID == b.botID {

@@ -66,7 +66,7 @@ func FormatPrompt(mc Context) string {
 		b.WriteString("Each fact is prefixed with the user who stated it.\n\n")
 	}
 	if len(mc.Readonly) > 0 {
-		b.WriteString("Recent topics in read-only channels (for background only, do not reply there):\n")
+		b.WriteString("Recent topics in read-only channels:\n")
 		for _, m := range mc.Readonly {
 			name := mc.ReadonlyNames[m.ChannelID]
 			if name == "" {
